@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowUpRight, ArrowDownLeft, Shield, Lock, Send, DollarSign, ExternalLink, Eye, EyeOff, ChevronDown, Wallet, Check } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { usePrivatePayment } from "@/hooks/usePrivatePayment";
+import { useProgram } from "@/hooks/useProgram";
 
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -23,6 +24,7 @@ export default function Payments() {
   const [amount, setAmount] = useState("");
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const { sendPayment, step: paymentStep, error: paymentError, txSignature, reset: resetPayment } = usePrivatePayment();
+  const program = useProgram();
 
   const totalSent = payments.filter((p) => p.sender === "me").reduce((sum, p) => sum + p.amount, 0);
   const totalReceived = payments.filter((p) => p.recipient === "me").reduce((sum, p) => sum + p.amount, 0);
@@ -125,8 +127,13 @@ export default function Payments() {
                 <Lock className="w-3 h-3 text-[#16A34A] ml-auto" />
               </div>
               <div className="flex items-center gap-2 text-xs text-[#475569]">
-                <span className="w-5 h-5 rounded-full bg-[#16A34A] text-white flex items-center justify-center text-[10px] font-bold">2</span>
-                <span>Payment record delegated to MagicBlock TEE</span>
+                <span className="w-5 h-5 rounded-full bg-[#7C3AED] text-white flex items-center justify-center text-[10px] font-bold">2</span>
+                <span>Record payment on-chain</span>
+                <Lock className="w-3 h-3 text-[#16A34A] ml-auto" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#475569]">
+                <span className="w-5 h-5 rounded-full bg-[#16A34A] text-white flex items-center justify-center text-[10px] font-bold">3</span>
+                <span>Create MagicBlock permission &amp; delegate to TEE</span>
                 <Shield className="w-3 h-3 text-[#16A34A] ml-auto" />
               </div>
             </div>
@@ -139,11 +146,15 @@ export default function Payments() {
                   <span className="text-sm font-medium text-[#2563EB]">
                     {paymentStep === "sending" && "Sending SOL payment..."}
                     {paymentStep === "confirming" && "Confirming transaction..."}
+                    {paymentStep === "recording" && "Recording payment on-chain..."}
+                    {paymentStep === "delegating" && "Delegating to MagicBlock TEE..."}
                   </span>
                 </div>
                 <div className="flex gap-1">
-                  <div className={`h-1.5 flex-1 rounded-full ${["sending", "confirming"].includes(paymentStep) ? "bg-[#2563EB]" : "bg-[#E2E8F0]"}`} />
-                  <div className={`h-1.5 flex-1 rounded-full ${paymentStep === "confirming" ? "bg-[#16A34A]" : "bg-[#E2E8F0]"}`} />
+                  <div className={`h-1.5 flex-1 rounded-full ${["sending", "confirming", "recording", "delegating"].includes(paymentStep) ? "bg-[#2563EB]" : "bg-[#E2E8F0]"}`} />
+                  <div className={`h-1.5 flex-1 rounded-full ${["confirming", "recording", "delegating"].includes(paymentStep) ? "bg-[#7C3AED]" : "bg-[#E2E8F0]"}`} />
+                  <div className={`h-1.5 flex-1 rounded-full ${["recording", "delegating"].includes(paymentStep) ? "bg-[#7C3AED]" : "bg-[#E2E8F0]"}`} />
+                  <div className={`h-1.5 flex-1 rounded-full ${paymentStep === "delegating" ? "bg-[#16A34A]" : "bg-[#E2E8F0]"}`} />
                 </div>
               </div>
             )}
@@ -154,7 +165,7 @@ export default function Payments() {
                   <div className="w-5 h-5 rounded-full bg-[#16A34A] flex items-center justify-center">
                     <Check className="w-3 h-3 text-white" />
                   </div>
-                  <span className="text-sm font-semibold text-[#15803D]">Payment Sent Privately!</span>
+                  <span className="text-sm font-semibold text-[#15803D]">Payment Sent &amp; Protected by MagicBlock TEE!</span>
                 </div>
                 <a
                   href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
@@ -181,12 +192,14 @@ export default function Payments() {
             )}
 
             <button
-              onClick={() => sendPayment(recipient, parseFloat(amount))}
+              onClick={() => sendPayment(recipient, parseFloat(amount), program)}
               disabled={!recipient || !amount || !["idle", "done", "error"].includes(paymentStep)}
               className="w-full py-3 bg-gradient-to-r from-[#2563EB] to-[#16A34A] text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md"
             >
-              {["sending", "confirming"].includes(paymentStep)
-                ? "Processing..."
+              {["sending", "confirming", "recording", "delegating"].includes(paymentStep)
+                ? paymentStep === "recording" ? "Recording on-chain..."
+                  : paymentStep === "delegating" ? "Delegating to TEE..."
+                  : "Processing..."
                 : "Send Payment"}
             </button>
             <p className="text-[10px] text-center text-[#94A3B8] flex items-center justify-center gap-1">
