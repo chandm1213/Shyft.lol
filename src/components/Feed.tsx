@@ -131,9 +131,9 @@ function PostCard({ post }: { post: Post }) {
 }
 
 export default function Feed() {
-  const { posts, addPost, isConnected } = useAppStore();
+  const { posts, addPost, isConnected, friendsOnlyDefault } = useAppStore();
   const [newPost, setNewPost] = useState("");
-  const [isPrivate, setIsPrivate] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(friendsOnlyDefault);
   const program = useProgram();
   const { publicKey } = useWallet();
   const [onchainPosts, setOnchainPosts] = useState<any[]>([]);
@@ -141,6 +141,11 @@ export default function Feed() {
   const [loadingOnchain, setLoadingOnchain] = useState(false);
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
   const [friendList, setFriendList] = useState<PublicKey[]>([]);
+
+  // Sync default privacy when user changes it in Profile settings
+  useEffect(() => {
+    setIsPrivate(friendsOnlyDefault);
+  }, [friendsOnlyDefault]);
 
   // Fetch all public posts from Solana + private posts from friends
   const fetchOnchainPosts = async () => {

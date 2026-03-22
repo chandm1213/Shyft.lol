@@ -28,6 +28,10 @@ interface AppState {
   addPayment: (payment: Payment) => void;
   updatePaymentStatus: (paymentId: string, status: Payment["status"]) => void;
 
+  // Privacy settings
+  friendsOnlyDefault: boolean;
+  setFriendsOnlyDefault: (val: boolean) => void;
+
   // Active tab
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -156,6 +160,10 @@ export const useAppStore = create<AppState>()(
       payments: state.payments.map((p) => (p.id === paymentId ? { ...p, status } : p)),
     })),
 
+  // Privacy settings
+  friendsOnlyDefault: true,
+  setFriendsOnlyDefault: (val) => set({ friendsOnlyDefault: val }),
+
   // Navigation
   activeTab: "feed",
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -170,6 +178,7 @@ export const useAppStore = create<AppState>()(
         conversations: state.conversations,
         messages: state.messages,
         payments: state.payments,
+        friendsOnlyDefault: state.friendsOnlyDefault,
       }),
     }
   )

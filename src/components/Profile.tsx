@@ -15,9 +15,10 @@ export default function Profile() {
   const [onchainProfile, setOnchainProfile] = useState<any>(null);
   const [onchainFriends, setOnchainFriends] = useState<PublicKey[]>([]);
   const [hasFriendList, setHasFriendList] = useState(false);
+  const { friendsOnlyDefault, setFriendsOnlyDefault } = useAppStore();
   const [copied, setCopied] = useState(false);
   const [profilePrivate, setProfilePrivate] = useState(false);
-  const [friendsOnlyPosts, setFriendsOnlyPosts] = useState(true);
+  const [profilePermissionCreated, setProfilePermissionCreated] = useState(false);
   const [hidePaymentHistory, setHidePaymentHistory] = useState(true);
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [friendAddress, setFriendAddress] = useState("");
@@ -27,6 +28,9 @@ export default function Profile() {
     if (program && publicKey) {
       program.getProfile(publicKey).then((profile: any) => {
         setOnchainProfile(profile);
+        if (profile) {
+          setProfilePrivate(profile.isPrivate || profile.is_private || false);
+        }
       });
       program.getFriendList(publicKey).then((list: any) => {
         if (list) {
@@ -287,12 +291,35 @@ export default function Profile() {
               onClick={async () => {
                 const newValue = !profilePrivate;
                 setProfilePrivate(newValue);
-                if (program && onchainProfile) {
+                if (program && onchainProfile && publicKey) {
                   try {
+                    // First time: need to create permission on profile PDA before we can update it
+                    if (!profilePermissionCreated) {
+                      try {
+                        const { getProfilePda } = await import("@/lib/program");
+                        const { BN } = await import("@coral-xyz/anchor");
+                        const [profilePda] = getProfilePda(publicKey);
+                        const accountType = { profile: { owner: publicKey } };
+                        const members = newValue
+                          ? [{ flags: 7, pubkey: publicKey }]
+                          : null;
+                        await program.createPermission(accountType, profilePda, members);
+                        setProfilePermissionCreated(true);
+                        console.log("✅ Profile permission created");
+                      } catch (permErr: any) {
+                        // Permission might already exist — that's fine, continue with update
+                        if (!permErr?.message?.includes("already in use")) {
+                          console.warn("⚠️ Permission creation:", permErr?.message?.slice(0, 100));
+                        }
+                        setProfilePermissionCreated(true);
+                      }
+                    }
                     const sig = await program.updateProfilePrivacy(newValue);
-                    toast("privacy", newValue ? "Profile set to private" : "Profile set to public", `TX: ${sig.slice(0, 8)}...`);
+                    toast("privacy", newValue ? "Profile set to private 🔐" : "Profile set to public", `TX: ${sig.slice(0, 8)}...`);
                   } catch (err: any) {
+                    console.error("Privacy update failed:", err);
                     toast("error", "Privacy update failed", err?.message?.slice(0, 60));
+                    setProfilePrivate(!newValue); // revert
                   }
                 }
               }}
@@ -315,13 +342,17 @@ export default function Profile() {
               </div>
             </div>
             <button
-              onClick={() => setFriendsOnlyPosts(!friendsOnlyPosts)}
+              onClick={() => {
+                const newVal = !friendsOnlyDefault;
+                setFriendsOnlyDefault(newVal);
+                toast("privacy", newVal ? "New posts default to Friends Only" : "New posts default to Public", "");
+              }}
               className={`w-11 h-6 rounded-full transition-all duration-300 ${
-                friendsOnlyPosts ? "bg-[#16A34A]" : "bg-[#E2E8F0]"
+                friendsOnlyDefault ? "bg-[#16A34A]" : "bg-[#E2E8F0]"
               }`}
             >
               <div className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-300 ${
-                friendsOnlyPosts ? "translate-x-5.5 ml-[22px]" : "translate-x-0.5 ml-[2px]"
+                friendsOnlyDefault ? "translate-x-5.5 ml-[22px]" : "translate-x-0.5 ml-[2px]"
               }`} />
             </button>
           </div>
