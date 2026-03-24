@@ -333,9 +333,14 @@ pub mod shadowspace {
 
     pub fn create_friend_list(ctx: Context<CreateFriendList>) -> Result<()> {
         let friends = &mut ctx.accounts.friend_list;
-        friends.owner = ctx.accounts.user.key();
-        friends.friends = vec![];
-        msg!("Friend list created for {}", friends.owner);
+        // Only initialize if not already set (init_if_needed may load existing account)
+        if friends.owner == Pubkey::default() {
+            friends.owner = ctx.accounts.user.key();
+            friends.friends = vec![];
+            msg!("Friend list created for {}", friends.owner);
+        } else {
+            msg!("Friend list already exists for {}", friends.owner);
+        }
         Ok(())
     }
 

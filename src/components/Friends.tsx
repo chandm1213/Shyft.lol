@@ -137,13 +137,6 @@ export default function Friends() {
     try {
       const fromPubkey = new PublicKey(fromAddress);
 
-      // Ensure both friend lists exist before accepting
-      try {
-        await program.createFriendList();
-      } catch {
-        // Already exists, that's fine
-      }
-
       await program.acceptFriendRequest(fromPubkey);
       toast("success", "Friend added! 🎉", "You're now friends — you can see each other's private posts");
       await fetchFriendData();
