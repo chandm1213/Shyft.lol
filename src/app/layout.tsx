@@ -5,6 +5,11 @@ import WalletProvider from "@/contexts/WalletProvider";
 export const metadata: Metadata = {
   title: "Shyft — Private Social on Solana",
   description: "Shyft is a privacy-first social platform built on Solana with MagicBlock Private Ephemeral Rollups",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
