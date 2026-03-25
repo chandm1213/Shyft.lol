@@ -2,6 +2,16 @@ import { Program, AnchorProvider, Idl, BN, BorshCoder } from "@coral-xyz/anchor"
 import { Connection, PublicKey, SystemProgram, Keypair, Transaction } from "@solana/web3.js";
 import idl from "./idl.json";
 
+/** Optional session key info for signing without wallet popup */
+export interface SessionOpts {
+  /** Ephemeral keypair that signs the transaction */
+  sessionKeypair: Keypair;
+  /** SessionToken PDA (on the session-keys program) */
+  sessionTokenPda: PublicKey;
+  /** The real wallet pubkey (authority) — needed for PDA derivation */
+  authority: PublicKey;
+}
+
 const PROGRAM_ID = new PublicKey("EEnouVLAoQGMEbrypEhP3Ct5RgCViCWG4n1nCZNwMxjQ");
 const PERMISSION_PROGRAM_ID = new PublicKey("ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1");
 const DELEGATION_PROGRAM_ID = new PublicKey("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");
@@ -237,15 +247,16 @@ export class ShyftClient {
 
   // ========== POSTS ==========
 
-  async createPost(postId: number, content: string, isPrivate: boolean): Promise<string> {
-    const author = this.provider.wallet.publicKey;
-    if (!author) {
+  async createPost(postId: number, content: string, isPrivate: boolean, session?: SessionOpts): Promise<string> {
+    const realWallet = session?.authority ?? this.provider.wallet.publicKey;
+    if (!realWallet) {
       throw new Error("Wallet not connected - no public key available");
     }
 
     console.log("=== Creating Post ===");
-    console.log("Author:", author.toBase58());
+    console.log("Author (real wallet):", realWallet.toBase58());
     console.log("Post ID:", postId);
+    console.log("Using session key:", !!session);
 
     // If profile is still delegated to ER, undelegate first so we can use it
     try {
@@ -261,18 +272,50 @@ export class ShyftClient {
     }
 
     try {
-      const sig = await this.program.methods
-        .createPost(new BN(postId), content, isPrivate)
-        .accountsPartial({
-          author,
-          systemProgram: SystemProgram.programId,
-          sessionToken: null as any,
-        })
-        .rpc();
-      
-      console.log("Post created successfully:", sig);
-      rpcCache.invalidate("allPosts");
-      return sig;
+      if (session) {
+        // Session key flow — ephemeral key signs, no wallet popup
+        const [profilePda] = getProfilePda(realWallet);
+        const [postPda] = getPostPda(realWallet, postId);
+
+        const ix = await this.program.methods
+          .createPost(new BN(postId), content, isPrivate)
+          .accountsPartial({
+            post: postPda,
+            profile: profilePda,
+            author: session.sessionKeypair.publicKey,
+            systemProgram: SystemProgram.programId,
+            sessionToken: session.sessionTokenPda,
+          })
+          .instruction();
+
+        const tx = new Transaction().add(ix);
+        tx.feePayer = session.sessionKeypair.publicKey;
+        tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+        tx.sign(session.sessionKeypair);
+
+        const sig = await this.provider.connection.sendRawTransaction(tx.serialize());
+        await this.provider.connection.confirmTransaction(sig, "confirmed");
+
+        console.log("Post created (session key):", sig);
+        rpcCache.invalidate("allPosts");
+        return sig;
+      } else {
+        // Normal wallet flow — still need to pass profile PDA (IDL requires it)
+        const [profilePda] = getProfilePda(realWallet);
+        const sig = await this.program.methods
+          .createPost(new BN(postId), content, isPrivate)
+          .accountsPartial({
+            profile: profilePda,
+            author: realWallet,
+            systemProgram: SystemProgram.programId,
+            sessionToken: null as any,
+          })
+          .rpc();
+
+        console.log("Post created successfully:", sig);
+        rpcCache.invalidate("allPosts");
+        return sig;
+      }
     } catch (err: any) {
       console.error("Create post error:", err);
       throw err;
@@ -353,7 +396,7 @@ export class ShyftClient {
     }));
 
     // 2. Fetch delegated accounts (shared cache — used by messages too)
-    const delegatedAccounts = await this._getDelegated589Accounts();
+    const delegatedAccounts = await this._getDelegatedAccounts();
 
     for (const acc of delegatedAccounts) {
       try {
@@ -387,23 +430,32 @@ export class ShyftClient {
     return unique;
   }
 
-  /** Shared helper: fetch all delegated 589-byte accounts (used by posts, messages, payments).
-   *  Cached for 30s to avoid redundant getProgramAccounts calls. */
-  private async _getDelegated589Accounts(): Promise<readonly { pubkey: PublicKey; account: { data: Buffer } }[]> {
-    const cacheKey = "delegated589";
+  /** Shared helper: fetch all delegated post/message accounts.
+   *  Fetches both 589-byte (old posts + messages) and 357-byte (new posts) accounts.
+   *  Cached for 10s to avoid redundant getProgramAccounts calls. */
+  private async _getDelegatedAccounts(): Promise<readonly { pubkey: PublicKey; account: { data: Buffer } }[]> {
+    const cacheKey = "delegatedAccounts";
     const cached = rpcCache.get<readonly { pubkey: PublicKey; account: { data: Buffer } }[]>(cacheKey);
     if (cached) return cached;
 
     try {
-      const accounts = await this.provider.connection.getProgramAccounts(
-        DELEGATION_PROGRAM_ID,
-        { filters: [{ dataSize: 589 }] }
-      );
-      console.log(`Found ${accounts.length} delegated accounts (589 bytes)`);
-      rpcCache.set(cacheKey, accounts);
-      return accounts;
+      // Fetch both old-size (589 = Message or old Post) and new-size (357 = new Post) in parallel
+      const [old589, new357] = await Promise.all([
+        this.provider.connection.getProgramAccounts(
+          DELEGATION_PROGRAM_ID,
+          { filters: [{ dataSize: 589 }] }
+        ),
+        this.provider.connection.getProgramAccounts(
+          DELEGATION_PROGRAM_ID,
+          { filters: [{ dataSize: 357 }] }
+        ),
+      ]);
+      const all = [...old589, ...new357];
+      console.log(`Found ${old589.length} delegated (589b) + ${new357.length} delegated (357b) = ${all.length} total`);
+      rpcCache.set(cacheKey, all);
+      return all;
     } catch (err) {
-      console.error("Failed to fetch delegated 589 accounts:", err);
+      console.error("Failed to fetch delegated accounts:", err);
       return [];
     }
   }
@@ -427,13 +479,37 @@ export class ShyftClient {
     }
   }
 
-  async likePost(author: PublicKey, postId: number): Promise<string> {
+  async likePost(author: PublicKey, postId: number, session?: SessionOpts): Promise<string> {
     const [postPda] = getPostPda(author, postId);
+    const realWallet = session?.authority ?? this.provider.wallet.publicKey;
+    const [profilePda] = getProfilePda(realWallet);
+
+    if (session) {
+      const ix = await this.program.methods
+        .likePost(new BN(postId))
+        .accountsPartial({
+          post: postPda,
+          profile: profilePda,
+          user: session.sessionKeypair.publicKey,
+          sessionToken: session.sessionTokenPda,
+        })
+        .instruction();
+
+      const tx = new Transaction().add(ix);
+      tx.feePayer = session.sessionKeypair.publicKey;
+      tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+      tx.sign(session.sessionKeypair);
+
+      const sig = await this.provider.connection.sendRawTransaction(tx.serialize());
+      await this.provider.connection.confirmTransaction(sig, "confirmed");
+      return sig;
+    }
 
     const sig = await this.program.methods
       .likePost(new BN(postId))
       .accountsPartial({
         post: postPda,
+        profile: profilePda,
         user: this.provider.wallet.publicKey,
         sessionToken: null as any,
       })
@@ -443,15 +519,44 @@ export class ShyftClient {
 
   // ========== COMMENTS ==========
 
-  async createComment(author: PublicKey, postId: number, commentIndex: number, content: string): Promise<string> {
+  async createComment(author: PublicKey, postId: number, commentIndex: number, content: string, session?: SessionOpts): Promise<string> {
     const [postPda] = getPostPda(author, postId);
     const [commentPda] = getCommentPda(postPda, commentIndex);
+    const realWallet = session?.authority ?? this.provider.wallet.publicKey;
+    const [commenterProfilePda] = getProfilePda(realWallet);
+
+    if (session) {
+      const ix = await this.program.methods
+        .createComment(new BN(postId), new BN(commentIndex), content)
+        .accountsPartial({
+          comment: commentPda,
+          post: postPda,
+          commenterProfile: commenterProfilePda,
+          author: session.sessionKeypair.publicKey,
+          systemProgram: SystemProgram.programId,
+          sessionToken: session.sessionTokenPda,
+        })
+        .instruction();
+
+      const tx = new Transaction().add(ix);
+      tx.feePayer = session.sessionKeypair.publicKey;
+      tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+      tx.sign(session.sessionKeypair);
+
+      const sig = await this.provider.connection.sendRawTransaction(tx.serialize());
+      await this.provider.connection.confirmTransaction(sig, "confirmed");
+
+      rpcCache.invalidate("allComments");
+      rpcCache.invalidate("allPostsDelegated");
+      return sig;
+    }
 
     const sig = await this.program.methods
       .createComment(new BN(postId), new BN(commentIndex), content)
       .accountsPartial({
         comment: commentPda,
         post: postPda,
+        commenterProfile: commenterProfilePda,
         author: this.provider.wallet.publicKey,
         systemProgram: SystemProgram.programId,
         sessionToken: null as any,
@@ -496,15 +601,44 @@ export class ShyftClient {
 
   // ========== REACTIONS ==========
 
-  async reactToPost(author: PublicKey, postId: number, reactionType: number): Promise<string> {
+  async reactToPost(author: PublicKey, postId: number, reactionType: number, session?: SessionOpts): Promise<string> {
+    const realWallet = session?.authority ?? this.provider.wallet.publicKey;
     const [postPda] = getPostPda(author, postId);
-    const [reactionPda] = getReactionPda(postPda, this.provider.wallet.publicKey);
+    // Reaction PDA now uses the real wallet (profile.owner), not the signer
+    const [reactionPda] = getReactionPda(postPda, realWallet);
+    const [reactorProfilePda] = getProfilePda(realWallet);
+
+    if (session) {
+      const ix = await this.program.methods
+        .reactToPost(new BN(postId), reactionType)
+        .accountsPartial({
+          reaction: reactionPda,
+          post: postPda,
+          reactorProfile: reactorProfilePda,
+          user: session.sessionKeypair.publicKey,
+          systemProgram: SystemProgram.programId,
+          sessionToken: session.sessionTokenPda,
+        })
+        .instruction();
+
+      const tx = new Transaction().add(ix);
+      tx.feePayer = session.sessionKeypair.publicKey;
+      tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+      tx.sign(session.sessionKeypair);
+
+      const sig = await this.provider.connection.sendRawTransaction(tx.serialize());
+      await this.provider.connection.confirmTransaction(sig, "confirmed");
+
+      rpcCache.invalidate("allReactions");
+      return sig;
+    }
 
     const sig = await this.program.methods
       .reactToPost(new BN(postId), reactionType)
       .accountsPartial({
         reaction: reactionPda,
         post: postPda,
+        reactorProfile: reactorProfilePda,
         user: this.provider.wallet.publicKey,
         systemProgram: SystemProgram.programId,
         sessionToken: null as any,
@@ -723,8 +857,8 @@ export class ShyftClient {
     const mapped: any[] = allMessages
       .filter((m: any) => m.chatId === chatIdStr);
 
-    // 2. Delegated messages (589 bytes — same as Post! Decode as Message and filter by chatId)
-    const delegatedAccounts = await this._getDelegated589Accounts();
+    // 2. Delegated messages — decode as Message and filter by chatId
+    const delegatedAccounts = await this._getDelegatedAccounts();
     for (const acc of delegatedAccounts) {
       try {
         const decoded = coder.accounts.decode("Message", acc.account.data);
@@ -836,8 +970,8 @@ export class ShyftClient {
       });
     }
 
-    // 3. Scan delegated messages (589 bytes) for payment messages in user's chats
-    const delegatedAccounts = await this._getDelegated589Accounts();
+    // 3. Scan delegated messages for payment messages in user's chats
+    const delegatedAccounts = await this._getDelegatedAccounts();
     for (const acc of delegatedAccounts) {
       try {
         const decoded = coder.accounts.decode("Message", acc.account.data);
@@ -1549,59 +1683,110 @@ export class ShyftClient {
   async createPrivatePost(
     postId: number,
     content: string,
-    friendPubkeys: PublicKey[]
-  ): Promise<{ createSig: string; permissionSig?: string; delegateSig?: string }> {
-    const author = this.provider.wallet.publicKey;
-    if (!author) {
+    friendPubkeys: PublicKey[],
+    session?: SessionOpts
+  ): Promise<{ sig: string }> {
+    const realWallet = session?.authority ?? this.provider.wallet.publicKey;
+    if (!realWallet) {
       throw new Error("Wallet not connected");
     }
 
-    console.log("🔐 === Creating Private Post with MagicBlock ===");
-    
+    console.log("🔐 === Creating Private Post (single TX) ===");
+
+    // If profile is still delegated to ER, undelegate first
     try {
-      // Step 1: Create the post on-chain
-      console.log("📝 Step 1: Creating post...");
-      const createSig = await this.createPost(postId, content, true);
-      console.log("✅ Post created:", createSig);
-
-      // Step 2: Create permission for the post (restrict to friends only)
-      console.log("🔒 Step 2: Creating permission for MagicBlock...");
-      const [postPda] = getPostPda(author, postId);
-      
-      // Prepare members: author has full access, friends have read-only
-      const members = [
-        { flags: 7, pubkey: author }, // AUTHORITY + TX_LOGS + TX_BALANCES (full access)
-        ...friendPubkeys.map((f) => ({ flags: 6, pubkey: f })), // TX_LOGS + TX_BALANCES (read-only)
-      ];
-      
-      const accountType = { post: { author, postId: new BN(postId) } };
-      
-      let permissionSig = undefined;
-      try {
-        permissionSig = await this.createPermission(accountType, postPda, members);
-        console.log("✅ Permission created:", permissionSig);
-      } catch (permErr: any) {
-        console.warn("⚠️  Permission creation failed, continuing without delegation:", permErr?.message?.slice(0, 100));
-        // Continue anyway - post is created, just without MagicBlock encryption
+      const delegated = await this.isProfileDelegated();
+      if (delegated) {
+        console.log("⚠️ Profile delegated — undelegating before post...");
+        await this.undelegateProfile();
+        await new Promise(r => setTimeout(r, 2000));
       }
-
-      // Step 3: Delegate to TEE (if permission succeeded)
-      let delegateSig = undefined;
-      if (permissionSig) {
-        console.log("🚀 Step 3: Delegating to MagicBlock TEE...");
-        try {
-          delegateSig = await this.delegateAccount(accountType, postPda);
-          console.log("✅ Delegated to TEE:", delegateSig);
-        } catch (delErr: any) {
-          console.warn("⚠️  Delegation failed:", delErr?.message?.slice(0, 100));
-        }
-      }
-
-      return { createSig, permissionSig, delegateSig };
-    } catch (err) {
-      console.error("❌ Error in private post creation:", err);
-      throw err;
+    } catch (e: any) {
+      console.warn("Undelegate check/attempt failed:", e?.message?.slice(0, 80));
     }
+
+    const signer = session ? session.sessionKeypair.publicKey : realWallet;
+    const [profilePda] = getProfilePda(realWallet);
+    const [postPda] = getPostPda(realWallet, postId);
+    const [permissionPda] = getPermissionPda(postPda);
+    const [bufferPda] = getDelegationBufferPda(postPda);
+    const [delegationRecordPda] = getDelegationRecordPda(postPda);
+    const [delegationMetadataPda] = getDelegationMetadataPda(postPda);
+
+    const accountType = { post: { author: realWallet, postId: new BN(postId) } };
+
+    // Prepare members: author has full access, friends have read-only
+    const members = [
+      { flags: 7, pubkey: realWallet },
+      ...friendPubkeys.map((f) => ({ flags: 6, pubkey: f })),
+    ];
+
+    // === Build 3 instructions ===
+
+    // IX 1: createPost
+    const createPostIx = await this.program.methods
+      .createPost(new BN(postId), content, true)
+      .accountsPartial({
+        post: postPda,
+        profile: profilePda,
+        author: signer,
+        systemProgram: SystemProgram.programId,
+        sessionToken: session ? session.sessionTokenPda : (null as any),
+      })
+      .instruction();
+
+    // IX 2: createPermission
+    const createPermIx = await this.program.methods
+      .createPermission(accountType, members)
+      .accounts({
+        permissionedAccount: postPda,
+        permission: permissionPda,
+        payer: signer,
+        permissionProgram: PERMISSION_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+
+    // IX 3: delegatePda
+    const delegateIx = await this.program.methods
+      .delegatePda(accountType)
+      .accounts({
+        bufferPda,
+        delegationRecordPda,
+        delegationMetadataPda,
+        pda: postPda,
+        payer: signer,
+        ownerProgram: PROGRAM_ID,
+        delegationProgram: DELEGATION_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts([
+        { pubkey: TEE_VALIDATOR, isSigner: false, isWritable: false },
+      ])
+      .instruction();
+
+    // === Send as single TX ===
+    const tx = new Transaction().add(createPostIx, createPermIx, delegateIx);
+    tx.feePayer = signer;
+    tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+
+    let sig: string;
+    if (session) {
+      // Session key signs — no wallet popup
+      tx.sign(session.sessionKeypair);
+      sig = await this.provider.connection.sendRawTransaction(tx.serialize());
+    } else {
+      // Wallet signs — single popup for all 3 instructions
+      const signed = await this.provider.wallet.signTransaction(tx);
+      sig = await this.provider.connection.sendRawTransaction(signed.serialize());
+    }
+
+    await this.provider.connection.confirmTransaction(sig, "confirmed");
+    console.log("✅ Private post created + permissioned + delegated in 1 TX:", sig);
+
+    rpcCache.invalidate("allPosts");
+    rpcCache.invalidate("allPostsDelegated");
+    return { sig };
   }
 
   // ========== HELPER: Full private chat flow ==========

@@ -501,6 +501,33 @@
           }
         },
         {
+          "name": "commenter_profile",
+          "docs": [
+            "The commenter's profile — used to resolve real wallet for session keys"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "commenter_profile.owner",
+                "account": "Profile"
+              }
+            ]
+          }
+        },
+        {
           "name": "author",
           "writable": true,
           "signer": true
@@ -788,7 +815,8 @@
               },
               {
                 "kind": "account",
-                "path": "author"
+                "path": "profile.owner",
+                "account": "Profile"
               },
               {
                 "kind": "arg",
@@ -816,7 +844,8 @@
               },
               {
                 "kind": "account",
-                "path": "author"
+                "path": "profile.owner",
+                "account": "Profile"
               }
             ]
           }
@@ -1449,6 +1478,33 @@
           }
         },
         {
+          "name": "profile",
+          "docs": [
+            "The user's profile — used to resolve real wallet for session keys"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "profile.owner",
+                "account": "Profile"
+              }
+            ]
+          }
+        },
+        {
           "name": "user",
           "signer": true
         },
@@ -1538,7 +1594,8 @@
               },
               {
                 "kind": "account",
-                "path": "user"
+                "path": "reactor_profile.owner",
+                "account": "Profile"
               }
             ]
           }
@@ -1564,6 +1621,33 @@
               {
                 "kind": "arg",
                 "path": "post_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reactor_profile",
+          "docs": [
+            "The reactor's profile — used to resolve real wallet for session keys + reaction PDA"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "reactor_profile.owner",
+                "account": "Profile"
               }
             ]
           }

@@ -7,7 +7,8 @@ import { toast } from "@/components/Toast";
 import { useProgram } from "@/hooks/useProgram";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
-import { ShyftClient, clearRpcCache } from "@/lib/program";
+import { ShyftClient, clearRpcCache, SessionOpts } from "@/lib/program";
+import { useSessionKey, SessionKeyState } from "@/hooks/useSessionKey";
 
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -43,6 +44,7 @@ function OnChainPostCard({
   profileMap,
   onCommentAdded,
   onReactionAdded,
+  sessionState,
 }: {
   post: any;
   profile: any;
@@ -54,6 +56,7 @@ function OnChainPostCard({
   profileMap: Record<string, any>;
   onCommentAdded: () => void;
   onReactionAdded: () => void;
+  sessionState: SessionKeyState;
 }) {
   const { likedPosts, addLikedPost, isConnected, currentUser } = useAppStore();
   const { publicKey: walletKey } = useWallet();
@@ -66,6 +69,30 @@ function OnChainPostCard({
   const [localLikeBoost, setLocalLikeBoost] = useState(0);
 
   const hasLiked = likedPosts.includes(post.publicKey);
+
+  /** Get session opts — auto-creates session if needed (1 wallet sign, then all free) */
+  const getSessionOpts = async (): Promise<SessionOpts | undefined> => {
+    if (sessionState.isActive && sessionState.sessionKeypair && sessionState.sessionTokenPda) {
+      return {
+        sessionKeypair: sessionState.sessionKeypair,
+        sessionTokenPda: sessionState.sessionTokenPda,
+        authority: new PublicKey(walletKey!.toBase58()),
+      };
+    }
+    // Auto-create session on first interaction
+    console.log("🔑 No active session — creating one...");
+    const result = await sessionState.createSession();
+    if (result) {
+      return {
+        sessionKeypair: result.keypair,
+        sessionTokenPda: result.tokenPda,
+        authority: new PublicKey(walletKey!.toBase58()),
+      };
+    }
+    // Session creation failed or user rejected — fall back to no session (wallet signs each TX)
+    console.warn("🔑 Session creation failed — falling back to wallet signing");
+    return undefined;
+  };
   const postComments = allComments.filter((c) => c.post === post.publicKey)
     .sort((a, b) => Number(a.createdAt) - Number(b.createdAt));
   const postReactions = allReactions.filter((r) => r.post === post.publicKey);
@@ -98,7 +125,8 @@ function OnChainPostCard({
     try {
       const authorPubkey = new PublicKey(post.author);
       const postId = Number(post.postId);
-      await program.likePost(authorPubkey, postId);
+      const session = await getSessionOpts();
+      await program.likePost(authorPubkey, postId, session);
       addLikedPost(post.publicKey);
       setLocalLikeBoost((prev) => prev + 1);
       toast("success", "Liked! ❤️", "Recorded on-chain — visible to everyone");
@@ -120,7 +148,8 @@ function OnChainPostCard({
       const authorPubkey = new PublicKey(post.author);
       const postId = Number(post.postId);
       const commentIndex = Date.now(); // unique index
-      await program.createComment(authorPubkey, postId, commentIndex, commentText.trim());
+      const session = await getSessionOpts();
+      await program.createComment(authorPubkey, postId, commentIndex, commentText.trim(), session);
       setCommentText("");
       toast("success", "Comment posted! 💬", "Your comment is on-chain — everyone can see it");
       onCommentAdded();
@@ -141,7 +170,8 @@ function OnChainPostCard({
     try {
       const authorPubkey = new PublicKey(post.author);
       const postId = Number(post.postId);
-      await program.reactToPost(authorPubkey, postId, reactionType);
+      const session = await getSessionOpts();
+      await program.reactToPost(authorPubkey, postId, reactionType, session);
       setShowReactions(false);
       toast("success", `Reacted ${REACTIONS[reactionType].emoji}`, "Your reaction is on-chain!");
       onReactionAdded();
@@ -382,6 +412,7 @@ export default function Feed() {
   const [isPrivate, setIsPrivate] = useState(friendsOnlyDefault);
   const program = useProgram();
   const { publicKey } = useWallet();
+  const sessionState = useSessionKey();
   const [onchainPosts, setOnchainPosts] = useState<any[]>([]);
   const [privatePostsFromFriends, setPrivatePostsFromFriends] = useState<any[]>([]);
   const [loadingOnchain, setLoadingOnchain] = useState(false);
@@ -530,18 +561,32 @@ export default function Feed() {
         throw new Error("You need to create a profile first. Go to the Profile tab to set up your account.");
       }
 
-      if (privacy) {
-        const result = await program.createPrivatePost(postId, content, friendList);
-        if (result.delegateSig) {
-          toast("success", "Private post delegated to MagicBlock TEE! 🔐", `TX: ${result.createSig.slice(0, 8)}...`);
-        } else if (result.permissionSig) {
-          toast("success", "Private post with permission created", `TX: ${result.createSig.slice(0, 8)}...`);
-        } else {
-          toast("success", "Private post created on-chain", `TX: ${result.createSig.slice(0, 8)}...`);
-        }
+      // Build session opts (shared by both public and private paths)
+      let session: SessionOpts | undefined;
+      if (sessionState.isActive && sessionState.sessionKeypair && sessionState.sessionTokenPda) {
+        session = {
+          sessionKeypair: sessionState.sessionKeypair,
+          sessionTokenPda: sessionState.sessionTokenPda,
+          authority: publicKey,
+        };
       } else {
-        const sig = await program.createPost(postId, content, false);
-        toast("success", "Post confirmed on Solana", `TX: ${sig.slice(0, 8)}...`);
+        // Try to auto-create session (1 wallet popup)
+        const result = await sessionState.createSession();
+        if (result) {
+          session = {
+            sessionKeypair: result.keypair,
+            sessionTokenPda: result.tokenPda,
+            authority: publicKey,
+          };
+        }
+      }
+
+      if (privacy) {
+        const result = await program.createPrivatePost(postId, content, friendList, session);
+        toast("success", session ? "Private post created in 1 TX (no popup!) 🔐🔑" : "Private post created in 1 TX! 🔐", `TX: ${result.sig.slice(0, 8)}...`);
+      } else {
+        const sig = await program.createPost(postId, content, false, session);
+        toast("success", session ? "Post confirmed (no wallet popup!) 🔑" : "Post confirmed on Solana", `TX: ${sig.slice(0, 8)}...`);
       }
 
       // Refresh on-chain posts so the real post shows up immediately
@@ -608,6 +653,32 @@ export default function Feed() {
         </div>
       )}
 
+      {/* Session Key Status */}
+      {isConnected && (
+        <div className={`flex items-center justify-between px-3.5 py-2 rounded-xl text-xs border ${
+          sessionState.isActive
+            ? "bg-[#F0FDF4] border-[#BBF7D0] text-[#16A34A]"
+            : "bg-[#FFF7ED] border-[#FED7AA] text-[#EA580C]"
+        }`}>
+          <div className="flex items-center gap-1.5">
+            <span>{sessionState.isActive ? "🔑" : "🔓"}</span>
+            <span className="font-medium">
+              {sessionState.isActive
+                ? "Session active — no wallet popups!"
+                : sessionState.isCreating
+                  ? "Creating session..."
+                  : "No session — first action will create one (1 sign)"
+              }
+            </span>
+          </div>
+          {sessionState.isActive && sessionState.expiresAt && (
+            <span className="text-[10px] opacity-70">
+              Expires {new Date(sessionState.expiresAt).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Posts */}
       {!isConnected && (
         <div className="bg-gradient-to-br from-[#EFF6FF] to-[#F0FDF4] rounded-2xl p-8 text-center border border-[#E2E8F0]">
@@ -659,6 +730,7 @@ export default function Feed() {
                 profileMap={profileMap}
                 onCommentAdded={refreshInteractions}
                 onReactionAdded={refreshInteractions}
+                sessionState={sessionState}
               />
             );
           })}
@@ -701,6 +773,7 @@ export default function Feed() {
                   profileMap={profileMap}
                   onCommentAdded={refreshInteractions}
                   onReactionAdded={refreshInteractions}
+                  sessionState={sessionState}
                 />
               );
             })

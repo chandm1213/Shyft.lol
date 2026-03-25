@@ -185,7 +185,7 @@ pub mod shadowspace {
         require!(content.len() <= 140, ShadowError::ContentTooLong);
         let comment = &mut ctx.accounts.comment;
         comment.post = ctx.accounts.post.key();
-        comment.author = ctx.accounts.author.key();
+        comment.author = ctx.accounts.commenter_profile.owner;
         comment.comment_index = comment_index;
         comment.content = content;
         comment.created_at = Clock::get()?.unix_timestamp;
@@ -206,7 +206,7 @@ pub mod shadowspace {
     ) -> Result<()> {
         let reaction = &mut ctx.accounts.reaction;
         reaction.post = ctx.accounts.post.key();
-        reaction.user = ctx.accounts.user.key();
+        reaction.user = ctx.accounts.reactor_profile.owner;
         reaction.reaction_type = reaction_type;
         reaction.created_at = Clock::get()?.unix_timestamp;
         msg!("Reaction {} on post {}", reaction_type, _post_id);
@@ -523,9 +523,9 @@ pub struct UndelegateProfileCtx<'info> {
 #[derive(Accounts)]
 #[instruction(post_id: u64)]
 pub struct CreatePost<'info> {
-    #[account(init_if_needed, payer = author, space = 8 + Post::LEN, seeds = [POST_SEED, author.key().as_ref(), &post_id.to_le_bytes()], bump)]
+    #[account(init_if_needed, payer = author, space = 8 + Post::LEN, seeds = [POST_SEED, profile.owner.as_ref(), &post_id.to_le_bytes()], bump)]
     pub post: Account<'info, Post>,
-    #[account(mut, seeds = [PROFILE_SEED, author.key().as_ref()], bump)]
+    #[account(mut, seeds = [PROFILE_SEED, profile.owner.as_ref()], bump)]
     pub profile: Account<'info, Profile>,
     #[account(mut)]
     pub author: Signer<'info>,
@@ -536,7 +536,7 @@ pub struct CreatePost<'info> {
 impl<'info> Session<'info> for CreatePost<'info> {
     fn session_token(&self) -> Option<Account<'info, SessionToken>> { self.session_token.clone() }
     fn session_signer(&self) -> Signer<'info> { self.author.clone() }
-    fn session_authority(&self) -> Pubkey { self.author.key() }
+    fn session_authority(&self) -> Pubkey { self.profile.owner }
     fn target_program(&self) -> Pubkey { crate::ID }
 }
 
@@ -545,6 +545,9 @@ impl<'info> Session<'info> for CreatePost<'info> {
 pub struct LikePost<'info> {
     #[account(mut, seeds = [POST_SEED, post.author.as_ref(), &post_id.to_le_bytes()], bump)]
     pub post: Account<'info, Post>,
+    /// The user's profile — used to resolve real wallet for session keys
+    #[account(seeds = [PROFILE_SEED, profile.owner.as_ref()], bump)]
+    pub profile: Account<'info, Profile>,
     pub user: Signer<'info>,
     pub session_token: Option<Account<'info, SessionToken>>,
 }
@@ -552,7 +555,7 @@ pub struct LikePost<'info> {
 impl<'info> Session<'info> for LikePost<'info> {
     fn session_token(&self) -> Option<Account<'info, SessionToken>> { self.session_token.clone() }
     fn session_signer(&self) -> Signer<'info> { self.user.clone() }
-    fn session_authority(&self) -> Pubkey { self.user.key() }
+    fn session_authority(&self) -> Pubkey { self.profile.owner }
     fn target_program(&self) -> Pubkey { crate::ID }
 }
 
@@ -563,6 +566,9 @@ pub struct CreateComment<'info> {
     pub comment: Account<'info, Comment>,
     #[account(mut, seeds = [POST_SEED, post.author.as_ref(), &post_id.to_le_bytes()], bump)]
     pub post: Account<'info, Post>,
+    /// The commenter's profile — used to resolve real wallet for session keys
+    #[account(seeds = [PROFILE_SEED, commenter_profile.owner.as_ref()], bump)]
+    pub commenter_profile: Account<'info, Profile>,
     #[account(mut)]
     pub author: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -572,17 +578,20 @@ pub struct CreateComment<'info> {
 impl<'info> Session<'info> for CreateComment<'info> {
     fn session_token(&self) -> Option<Account<'info, SessionToken>> { self.session_token.clone() }
     fn session_signer(&self) -> Signer<'info> { self.author.clone() }
-    fn session_authority(&self) -> Pubkey { self.author.key() }
+    fn session_authority(&self) -> Pubkey { self.commenter_profile.owner }
     fn target_program(&self) -> Pubkey { crate::ID }
 }
 
 #[derive(Accounts)]
 #[instruction(post_id: u64)]
 pub struct ReactToPost<'info> {
-    #[account(init_if_needed, payer = user, space = 8 + Reaction::LEN, seeds = [REACTION_SEED, post.key().as_ref(), user.key().as_ref()], bump)]
+    #[account(init_if_needed, payer = user, space = 8 + Reaction::LEN, seeds = [REACTION_SEED, post.key().as_ref(), reactor_profile.owner.as_ref()], bump)]
     pub reaction: Account<'info, Reaction>,
     #[account(seeds = [POST_SEED, post.author.as_ref(), &post_id.to_le_bytes()], bump)]
     pub post: Account<'info, Post>,
+    /// The reactor's profile — used to resolve real wallet for session keys + reaction PDA
+    #[account(seeds = [PROFILE_SEED, reactor_profile.owner.as_ref()], bump)]
+    pub reactor_profile: Account<'info, Profile>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -592,7 +601,7 @@ pub struct ReactToPost<'info> {
 impl<'info> Session<'info> for ReactToPost<'info> {
     fn session_token(&self) -> Option<Account<'info, SessionToken>> { self.session_token.clone() }
     fn session_signer(&self) -> Signer<'info> { self.user.clone() }
-    fn session_authority(&self) -> Pubkey { self.user.key() }
+    fn session_authority(&self) -> Pubkey { self.reactor_profile.owner }
     fn target_program(&self) -> Pubkey { crate::ID }
 }
 
