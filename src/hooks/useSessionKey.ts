@@ -157,21 +157,32 @@ export function useSessionKey(): SessionKeyState {
     }
   }, [authority]);
 
-  // Validate session token still exists on-chain
+  // Validate session token exists on-chain AND ephemeral key has enough SOL
   useEffect(() => {
-    if (!sessionTokenPda || !connection) return;
-    connection.getAccountInfo(sessionTokenPda).then((info) => {
+    if (!sessionTokenPda || !sessionKeypair || !connection) return;
+    const clearSession = () => {
+      console.log("🔑 Clearing invalid/underfunded session");
+      setSessionKeypair(null);
+      setSessionTokenPda(null);
+      setExpiresAt(null);
+      if (authority) localStorage.removeItem(STORAGE_KEY_PREFIX + authority.toBase58());
+    };
+    Promise.all([
+      connection.getAccountInfo(sessionTokenPda),
+      connection.getBalance(sessionKeypair.publicKey),
+    ]).then(([info, balance]) => {
       if (!info) {
-        console.log("🔑 Session token PDA no longer exists on-chain — clearing");
-        setSessionKeypair(null);
-        setSessionTokenPda(null);
-        setExpiresAt(null);
-        if (authority) {
-          localStorage.removeItem(STORAGE_KEY_PREFIX + authority.toBase58());
-        }
+        console.log("🔑 Session token PDA no longer exists on-chain");
+        clearSession();
+      } else if (balance < 4_000_000) {
+        // Need at least ~3.4M lamports for one post creation rent
+        console.log("🔑 Session key balance too low:", balance, "lamports — clearing");
+        clearSession();
+      } else {
+        console.log("🔑 Session key balance:", balance / 1e9, "SOL");
       }
     }).catch(() => {});
-  }, [sessionTokenPda, connection, authority]);
+  }, [sessionTokenPda, sessionKeypair, connection, authority]);
 
   /** Create a new session — requires 1 wallet signature */
   const createSession = useCallback(async (): Promise<{ keypair: Keypair; tokenPda: PublicKey } | null> => {
