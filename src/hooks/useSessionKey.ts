@@ -36,39 +36,57 @@ function getSessionTokenPda(
   );
 }
 
+/** Write a u64 as little-endian bytes into a Uint8Array at offset */
+function writeU64LE(arr: Uint8Array, value: bigint, offset: number): void {
+  const view = new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
+  view.setBigUint64(offset, value, true);
+}
+
+/** Write an i64 as little-endian bytes into a Uint8Array at offset */
+function writeI64LE(arr: Uint8Array, value: bigint, offset: number): void {
+  const view = new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
+  view.setBigInt64(offset, value, true);
+}
+
 /** Encode create_session instruction data (Anchor discriminator + args) */
-function encodeCreateSessionData(topUp: boolean, validUntil: number, lamports: number): Buffer {
+function encodeCreateSessionData(topUp: boolean, validUntil: number, lamports: number): Uint8Array {
   // Anchor discriminator for "create_session" = sha256("global:create_session")[0..8]
-  const discriminator = Buffer.from([49, 157, 171, 255, 65, 244, 17, 219]);
+  const discriminator = [49, 157, 171, 255, 65, 244, 17, 219];
 
   // topUp: Option<bool> — Some(true/false)
-  const topUpBuf = Buffer.alloc(2);
-  topUpBuf[0] = 1; // Some
-  topUpBuf[1] = topUp ? 1 : 0;
+  const topUpBytes = [1, topUp ? 1 : 0]; // Some(bool)
 
   // validUntil: Option<i64> — Some(timestamp)
-  const validUntilBuf = Buffer.alloc(9);
-  validUntilBuf[0] = 1; // Some
-  validUntilBuf.writeBigInt64LE(BigInt(validUntil), 1);
+  const validUntilBytes = new Uint8Array(9);
+  validUntilBytes[0] = 1; // Some
+  writeI64LE(validUntilBytes, BigInt(validUntil), 1);
 
   // lamports: Option<u64> — Some(amount) or None
-  let lamportsBuf: Buffer;
+  let lamportsBytes: Uint8Array;
   if (lamports > 0) {
-    lamportsBuf = Buffer.alloc(9);
-    lamportsBuf[0] = 1; // Some
-    lamportsBuf.writeBigUInt64LE(BigInt(lamports), 1);
+    lamportsBytes = new Uint8Array(9);
+    lamportsBytes[0] = 1; // Some
+    writeU64LE(lamportsBytes, BigInt(lamports), 1);
   } else {
-    lamportsBuf = Buffer.alloc(1);
-    lamportsBuf[0] = 0; // None
+    lamportsBytes = new Uint8Array([0]); // None
   }
 
-  return Buffer.concat([discriminator, topUpBuf, validUntilBuf, lamportsBuf]);
+  // Concat all parts
+  const total = discriminator.length + topUpBytes.length + validUntilBytes.length + lamportsBytes.length;
+  const result = new Uint8Array(total);
+  let offset = 0;
+  result.set(discriminator, offset); offset += discriminator.length;
+  result.set(topUpBytes, offset); offset += topUpBytes.length;
+  result.set(validUntilBytes, offset); offset += validUntilBytes.length;
+  result.set(lamportsBytes, offset);
+
+  return result;
 }
 
 /** Encode revoke_session instruction data */
-function encodeRevokeSessionData(): Buffer {
+function encodeRevokeSessionData(): Uint8Array {
   // Anchor discriminator for "revoke_session" = sha256("global:revoke_session")[0..8]
-  return Buffer.from([185, 98, 130, 80, 157, 62, 133, 48]);
+  return new Uint8Array([185, 98, 130, 80, 157, 62, 133, 48]);
 }
 
 const STORAGE_KEY_PREFIX = "shyft_session_";
@@ -181,7 +199,7 @@ export function useSessionKey(): SessionKeyState {
           { pubkey: TARGET_PROGRAM_ID, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
-        data: encodeCreateSessionData(true, validUntil, topUpLamports),
+        data: Buffer.from(encodeCreateSessionData(true, validUntil, topUpLamports)),
       });
 
       const tx = new Transaction().add(createIx);
@@ -236,7 +254,7 @@ export function useSessionKey(): SessionKeyState {
           { pubkey: authority, isSigner: false, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
-        data: encodeRevokeSessionData(),
+        data: Buffer.from(encodeRevokeSessionData()),
       });
 
       const tx = new Transaction().add(revokeIx);
