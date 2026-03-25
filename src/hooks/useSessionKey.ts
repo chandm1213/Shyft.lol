@@ -49,9 +49,9 @@ function writeI64LE(arr: Uint8Array, value: bigint, offset: number): void {
 }
 
 /** Encode create_session instruction data (Anchor discriminator + args) */
-function encodeCreateSessionData(topUp: boolean, validUntil: number, lamports: number): Uint8Array {
+function encodeCreateSessionData(topUp: boolean, validUntil: number): Uint8Array {
   // Anchor discriminator for "create_session" = sha256("global:create_session")[0..8]
-  const discriminator = [49, 157, 171, 255, 65, 244, 17, 219];
+  const discriminator = [242, 193, 143, 179, 150, 25, 122, 227];
 
   // topUp: Option<bool> — Some(true/false)
   const topUpBytes = [1, topUp ? 1 : 0]; // Some(bool)
@@ -61,24 +61,13 @@ function encodeCreateSessionData(topUp: boolean, validUntil: number, lamports: n
   validUntilBytes[0] = 1; // Some
   writeI64LE(validUntilBytes, BigInt(validUntil), 1);
 
-  // lamports: Option<u64> — Some(amount) or None
-  let lamportsBytes: Uint8Array;
-  if (lamports > 0) {
-    lamportsBytes = new Uint8Array(9);
-    lamportsBytes[0] = 1; // Some
-    writeU64LE(lamportsBytes, BigInt(lamports), 1);
-  } else {
-    lamportsBytes = new Uint8Array([0]); // None
-  }
-
-  // Concat all parts
-  const total = discriminator.length + topUpBytes.length + validUntilBytes.length + lamportsBytes.length;
+  // Concat all parts (on-chain IDL only has topUp + validUntil, no lamports arg)
+  const total = discriminator.length + topUpBytes.length + validUntilBytes.length;
   const result = new Uint8Array(total);
   let offset = 0;
   result.set(discriminator, offset); offset += discriminator.length;
   result.set(topUpBytes, offset); offset += topUpBytes.length;
-  result.set(validUntilBytes, offset); offset += validUntilBytes.length;
-  result.set(lamportsBytes, offset);
+  result.set(validUntilBytes, offset);
 
   return result;
 }
@@ -86,7 +75,7 @@ function encodeCreateSessionData(topUp: boolean, validUntil: number, lamports: n
 /** Encode revoke_session instruction data */
 function encodeRevokeSessionData(): Uint8Array {
   // Anchor discriminator for "revoke_session" = sha256("global:revoke_session")[0..8]
-  return new Uint8Array([185, 98, 130, 80, 157, 62, 133, 48]);
+  return new Uint8Array([86, 92, 198, 120, 144, 2, 7, 194]);
 }
 
 const STORAGE_KEY_PREFIX = "shyft_session_";
@@ -186,9 +175,6 @@ export function useSessionKey(): SessionKeyState {
       // Session valid for 24 hours
       const validUntil = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
 
-      // Top up the ephemeral keypair with 0.002 SOL for transaction fees
-      const topUpLamports = 2_000_000;
-
       // Build create_session instruction
       const createIx = new TransactionInstruction({
         programId: SESSION_KEYS_PROGRAM_ID,
@@ -199,10 +185,17 @@ export function useSessionKey(): SessionKeyState {
           { pubkey: TARGET_PROGRAM_ID, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
-        data: Buffer.from(encodeCreateSessionData(true, validUntil, topUpLamports)),
+        data: Buffer.from(encodeCreateSessionData(true, validUntil)),
       });
 
-      const tx = new Transaction().add(createIx);
+      // Transfer SOL to ephemeral key so it can pay tx fees
+      const topUpIx = SystemProgram.transfer({
+        fromPubkey: authority,
+        toPubkey: ephemeralKp.publicKey,
+        lamports: 2_000_000, // 0.002 SOL for ~200 transactions
+      });
+
+      const tx = new Transaction().add(topUpIx).add(createIx);
       tx.feePayer = authority;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
