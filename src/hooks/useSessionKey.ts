@@ -187,7 +187,7 @@ export function useSessionKey(): SessionKeyState {
       const validUntil = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
 
       // topUp=true tells the program to transfer lamports from authority to ephemeral key
-      // lamports=2_000_000 (0.002 SOL) funds ~200 tx fees for the session signer
+      // 50_000_000 lamports (0.05 SOL) funds ~14 post creations (rent ~3.4M each) + tx fees
       const createIx = new TransactionInstruction({
         programId: SESSION_KEYS_PROGRAM_ID,
         keys: [
@@ -197,7 +197,7 @@ export function useSessionKey(): SessionKeyState {
           { pubkey: TARGET_PROGRAM_ID, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
-        data: Buffer.from(encodeCreateSessionData(true, validUntil, 2_000_000)),
+        data: Buffer.from(encodeCreateSessionData(true, validUntil, 50_000_000)),
       });
 
       const tx = new Transaction().add(createIx);
