@@ -38,7 +38,8 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
         avatar: "🔒",
         bio: bio.trim() || "Privacy enthusiast on Shyft",
         isPrivate: false,
-        friends: [],
+        followerCount: 0,
+        followingCount: 0,
         createdAt: Date.now(),
       });
 
@@ -60,7 +61,8 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
       avatar: "🔒",
       bio: "Privacy enthusiast",
       isPrivate: false,
-      friends: [],
+      followerCount: 0,
+      followingCount: 0,
       createdAt: Date.now(),
     });
     onComplete();

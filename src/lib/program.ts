@@ -26,10 +26,9 @@ const PROFILE_SEED = Buffer.from("profile");
 const POST_SEED = Buffer.from("post");
 const CHAT_SEED = Buffer.from("chat");
 const MESSAGE_SEED = Buffer.from("message");
-const FRIEND_SEED = Buffer.from("friends");
+const FOLLOW_SEED = Buffer.from("follow");
 const COMMENT_SEED = Buffer.from("comment");
 const REACTION_SEED = Buffer.from("reaction");
-const FRIEND_REQUEST_SEED = Buffer.from("freq");
 const CONVERSATION_SEED = Buffer.from("conversation");
 
 // ========== Simple In-Memory Cache ==========
@@ -121,8 +120,8 @@ function getMessagePda(chatId: number, messageIndex: number): [PublicKey, number
   return PublicKey.findProgramAddressSync([MESSAGE_SEED, toLEBytes(chatId), toLEBytes(messageIndex)], PROGRAM_ID);
 }
 
-function getFriendListPda(owner: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([FRIEND_SEED, owner.toBuffer()], PROGRAM_ID);
+function getFollowPda(follower: PublicKey, following: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([FOLLOW_SEED, follower.toBuffer(), following.toBuffer()], PROGRAM_ID);
 }
 
 function getCommentPda(postPda: PublicKey, commentIndex: number): [PublicKey, number] {
@@ -133,9 +132,7 @@ function getReactionPda(postPda: PublicKey, user: PublicKey): [PublicKey, number
   return PublicKey.findProgramAddressSync([REACTION_SEED, postPda.toBuffer(), user.toBuffer()], PROGRAM_ID);
 }
 
-function getFriendRequestPda(from: PublicKey, to: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([FRIEND_REQUEST_SEED, from.toBuffer(), to.toBuffer()], PROGRAM_ID);
-}
+
 
 function getConversationPda(user1: PublicKey, user2: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
@@ -283,6 +280,7 @@ export class ShyftClient {
             post: postPda,
             profile: profilePda,
             author: session.sessionKeypair.publicKey,
+            payer: session.sessionKeypair.publicKey,
             systemProgram: SystemProgram.programId,
             sessionToken: session.sessionTokenPda,
           })
@@ -307,6 +305,7 @@ export class ShyftClient {
           .accountsPartial({
             profile: profilePda,
             author: realWallet,
+            payer: realWallet,
             systemProgram: SystemProgram.programId,
             sessionToken: null as any,
           })
@@ -533,6 +532,7 @@ export class ShyftClient {
           post: postPda,
           commenterProfile: commenterProfilePda,
           author: session.sessionKeypair.publicKey,
+          payer: session.sessionKeypair.publicKey,
           systemProgram: SystemProgram.programId,
           sessionToken: session.sessionTokenPda,
         })
@@ -558,6 +558,7 @@ export class ShyftClient {
         post: postPda,
         commenterProfile: commenterProfilePda,
         author: this.provider.wallet.publicKey,
+        payer: this.provider.wallet.publicKey,
         systemProgram: SystemProgram.programId,
         sessionToken: null as any,
       })
@@ -616,6 +617,7 @@ export class ShyftClient {
           post: postPda,
           reactorProfile: reactorProfilePda,
           user: session.sessionKeypair.publicKey,
+          payer: session.sessionKeypair.publicKey,
           systemProgram: SystemProgram.programId,
           sessionToken: session.sessionTokenPda,
         })
@@ -640,6 +642,7 @@ export class ShyftClient {
         post: postPda,
         reactorProfile: reactorProfilePda,
         user: this.provider.wallet.publicKey,
+        payer: this.provider.wallet.publicKey,
         systemProgram: SystemProgram.programId,
         sessionToken: null as any,
       })
@@ -1048,166 +1051,92 @@ export class ShyftClient {
     return { createSig, permissionSig, delegateSig: undefined };
   }
 
-  // ========== FRIENDS ==========
+  // ========== FOLLOW ==========
 
-  async createFriendList(): Promise<string> {
+  async followUser(targetPubkey: PublicKey): Promise<string> {
     const user = this.provider.wallet.publicKey;
-    const [friendListPda] = getFriendListPda(user);
+    const [followerProfilePda] = getProfilePda(user);
+    const [followingProfilePda] = getProfilePda(targetPubkey);
+    const [followPda] = getFollowPda(user, targetPubkey);
 
     const sig = await this.program.methods
-      .createFriendList()
+      .followUser()
       .accounts({
-        friendList: friendListPda,
+        followAccount: followPda,
+        followerProfile: followerProfilePda,
+        followingProfile: followingProfilePda,
         user,
         systemProgram: SystemProgram.programId,
       })
       .rpc();
+    rpcCache.invalidate("allFollows");
     return sig;
   }
 
-  async addFriend(friend: PublicKey): Promise<string> {
+  async unfollowUser(targetPubkey: PublicKey): Promise<string> {
     const user = this.provider.wallet.publicKey;
-    const [friendListPda] = getFriendListPda(user);
-    const [profilePda] = getProfilePda(user);
+    const [followerProfilePda] = getProfilePda(user);
+    const [followingProfilePda] = getProfilePda(targetPubkey);
+    const [followPda] = getFollowPda(user, targetPubkey);
 
     const sig = await this.program.methods
-      .addFriend(friend)
+      .unfollowUser()
       .accounts({
-        friendList: friendListPda,
-        profile: profilePda,
+        followAccount: followPda,
+        followerProfile: followerProfilePda,
+        followingProfile: followingProfilePda,
         user,
       })
       .rpc();
-    rpcCache.invalidate("friendList:");
+    rpcCache.invalidate("allFollows");
     return sig;
   }
 
-  async removeFriend(friend: PublicKey): Promise<string> {
+  /** Check if current user follows a target user */
+  async isFollowing(targetPubkey: PublicKey): Promise<boolean> {
     const user = this.provider.wallet.publicKey;
-    const [friendListPda] = getFriendListPda(user);
-    const [profilePda] = getProfilePda(user);
-
-    const sig = await this.program.methods
-      .removeFriend(friend)
-      .accounts({
-        friendList: friendListPda,
-        profile: profilePda,
-        user,
-      })
-      .rpc();
-    rpcCache.invalidate("friendList:");
-    return sig;
-  }
-
-  async getFriendList(owner: PublicKey): Promise<any> {
-    const cacheKey = `friendList:${owner.toBase58()}`;
-    const cached = rpcCache.get<any>(cacheKey);
-    if (cached !== null) return cached;
-
-    const [friendListPda] = getFriendListPda(owner);
+    const [followPda] = getFollowPda(user, targetPubkey);
     try {
-      const result = await this.accounts.friendList.fetch(friendListPda);
-      rpcCache.set(cacheKey, result);
-      return result;
+      await this.accounts.followAccount.fetch(followPda);
+      return true;
     } catch {
-      rpcCache.set(cacheKey, null, 15_000); // cache misses briefly too
-      return null;
+      return false;
     }
   }
 
-  // ========== FRIEND REQUESTS ==========
-
-  async sendFriendRequest(to: PublicKey): Promise<string> {
-    const from = this.provider.wallet.publicKey;
-    const [friendRequestPda] = getFriendRequestPda(from, to);
-
-    const sig = await this.program.methods
-      .sendFriendRequest()
-      .accounts({
-        friendRequest: friendRequestPda,
-        from,
-        to,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
-    rpcCache.invalidate("friendRequests");
-    return sig;
-  }
-
-  async acceptFriendRequest(from: PublicKey): Promise<string> {
-    const acceptor = this.provider.wallet.publicKey;
-    const [friendRequestPda] = getFriendRequestPda(from, acceptor);
-    const [acceptorFriendListPda] = getFriendListPda(acceptor);
-    const [senderFriendListPda] = getFriendListPda(from);
-    const [acceptorProfilePda] = getProfilePda(acceptor);
-    const [senderProfilePda] = getProfilePda(from);
-
-    // Both friend lists use init_if_needed on-chain now,
-    // so we don't need to pre-check or manually create them.
-    const sig = await this.program.methods
-      .acceptFriendRequest()
-      .accounts({
-        friendRequest: friendRequestPda,
-        acceptorFriendList: acceptorFriendListPda,
-        senderFriendList: senderFriendListPda,
-        acceptorProfile: acceptorProfilePda,
-        senderProfile: senderProfilePda,
-        acceptor,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
-    rpcCache.invalidate("friendRequests");
-    rpcCache.invalidate("friendList:");
-    return sig;
-  }
-
-  async rejectFriendRequest(from: PublicKey, to: PublicKey): Promise<string> {
-    const user = this.provider.wallet.publicKey;
-    const [friendRequestPda] = getFriendRequestPda(from, to);
-
-    const sig = await this.program.methods
-      .rejectFriendRequest()
-      .accounts({
-        friendRequest: friendRequestPda,
-        user,
-      })
-      .rpc();
-    rpcCache.invalidate("friendRequests");
-    return sig;
-  }
-
-  async getAllFriendRequests(): Promise<{ publicKey: string; from: string; to: string; status: number; createdAt: string }[]> {
-    const cacheKey = "friendRequests";
+  /** Get all follow accounts (for building follower/following lists) */
+  async getAllFollows(): Promise<{ follower: string; following: string; createdAt: string }[]> {
+    const cacheKey = "allFollows";
     const cached = rpcCache.get<any[]>(cacheKey);
     if (cached) return cached;
 
     try {
-      const all = await this.accounts.friendRequest.all();
-      const result = all.map((r: any) => ({
-        publicKey: r.publicKey.toBase58(),
-        from: r.account.from.toBase58(),
-        to: r.account.to.toBase58(),
-        status: r.account.status,
-        createdAt: r.account.createdAt?.toString() || "0",
+      const all = await this.accounts.followAccount.all();
+      const result = all.map((f: any) => ({
+        follower: f.account.follower.toBase58(),
+        following: f.account.following.toBase58(),
+        createdAt: f.account.createdAt?.toString() || "0",
       }));
       rpcCache.set(cacheKey, result);
       return result;
     } catch (err) {
-      console.error("getAllFriendRequests error:", err);
+      console.error("getAllFollows error:", err);
       return [];
     }
   }
 
-  async getIncomingRequests(userPubkey: PublicKey): Promise<{ publicKey: string; from: string; to: string; status: number; createdAt: string }[]> {
-    const all = await this.getAllFriendRequests();
+  /** Get list of pubkeys that a user is following */
+  async getFollowing(userPubkey: PublicKey): Promise<string[]> {
+    const all = await this.getAllFollows();
     const addr = userPubkey.toBase58();
-    return all.filter((r) => r.to === addr && r.status === 0);
+    return all.filter((f) => f.follower === addr).map((f) => f.following);
   }
 
-  async getOutgoingRequests(userPubkey: PublicKey): Promise<{ publicKey: string; from: string; to: string; status: number; createdAt: string }[]> {
-    const all = await this.getAllFriendRequests();
+  /** Get list of pubkeys that follow a user */
+  async getFollowers(userPubkey: PublicKey): Promise<string[]> {
+    const all = await this.getAllFollows();
     const addr = userPubkey.toBase58();
-    return all.filter((r) => r.from === addr && r.status === 0);
+    return all.filter((f) => f.following === addr).map((f) => f.follower);
   }
 
   /** Search all profiles by username (partial match) */
@@ -1678,128 +1607,6 @@ export class ShyftClient {
     console.warn("⚠️ Profile not found on ER after timeout — proceeding anyway");
   }
 
-  // ========== HELPER: Full private post flow ==========
-
-  async createPrivatePost(
-    postId: number,
-    content: string,
-    friendPubkeys: PublicKey[],
-    session?: SessionOpts
-  ): Promise<{ sig: string }> {
-    const realWallet = session?.authority ?? this.provider.wallet.publicKey;
-    if (!realWallet) {
-      throw new Error("Wallet not connected");
-    }
-
-    console.log("🔐 === Creating Private Post (single TX) ===");
-
-    // If profile is still delegated to ER, undelegate first
-    try {
-      const delegated = await this.isProfileDelegated();
-      if (delegated) {
-        console.log("⚠️ Profile delegated — undelegating before post...");
-        await this.undelegateProfile();
-        await new Promise(r => setTimeout(r, 2000));
-      }
-    } catch (e: any) {
-      console.warn("Undelegate check/attempt failed:", e?.message?.slice(0, 80));
-    }
-
-    // For private posts with session keys:
-    //   - Session key signs the createPost IX (session auth)
-    //   - Wallet pays for everything (feePayer + payer for permission/delegation)
-    //   - Wallet co-signs the TX (1 popup — unavoidable for expensive private posts)
-    // This prevents the session key from being drained below rent-exemption
-    const sessionAuthor = session ? session.sessionKeypair.publicKey : realWallet;
-    const payer = realWallet; // Wallet always pays for private posts
-
-    const [profilePda] = getProfilePda(realWallet);
-    const [postPda] = getPostPda(realWallet, postId);
-    const [permissionPda] = getPermissionPda(postPda);
-    const [bufferPda] = getDelegationBufferPda(postPda);
-    const [delegationRecordPda] = getDelegationRecordPda(postPda);
-    const [delegationMetadataPda] = getDelegationMetadataPda(postPda);
-
-    const accountType = { post: { author: realWallet, postId: new BN(postId) } };
-
-    // Prepare members: author has full access, friends have read-only
-    const members = [
-      { flags: 7, pubkey: realWallet },
-      ...friendPubkeys.map((f) => ({ flags: 6, pubkey: f })),
-    ];
-
-    // === Build 3 instructions ===
-
-    // IX 1: createPost — session key signs as author (if session active)
-    const createPostIx = await this.program.methods
-      .createPost(new BN(postId), content, true)
-      .accountsPartial({
-        post: postPda,
-        profile: profilePda,
-        author: sessionAuthor,
-        systemProgram: SystemProgram.programId,
-        sessionToken: session ? session.sessionTokenPda : (null as any),
-      })
-      .instruction();
-
-    // IX 2: createPermission — wallet pays rent
-    const createPermIx = await this.program.methods
-      .createPermission(accountType, members)
-      .accounts({
-        permissionedAccount: postPda,
-        permission: permissionPda,
-        payer: payer,
-        permissionProgram: PERMISSION_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
-      .instruction();
-
-    // IX 3: delegatePda — wallet pays rent
-    const delegateIx = await this.program.methods
-      .delegatePda(accountType)
-      .accounts({
-        bufferPda,
-        delegationRecordPda,
-        delegationMetadataPda,
-        pda: postPda,
-        payer: payer,
-        ownerProgram: PROGRAM_ID,
-        delegationProgram: DELEGATION_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
-      .remainingAccounts([
-        { pubkey: TEE_VALIDATOR, isSigner: false, isWritable: false },
-      ])
-      .instruction();
-
-    // === Send as single TX ===
-    const tx = new Transaction().add(createPostIx, createPermIx, delegateIx);
-    tx.feePayer = payer; // Wallet always pays the TX fee for private posts
-    tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
-
-    let sig: string;
-    if (session) {
-      // Session key + wallet co-sign:
-      //   - Session key signs createPost (via session token auth)
-      //   - Wallet signs as feePayer + payer for permission/delegation
-      // This requires 1 wallet popup but avoids draining the session key
-      tx.partialSign(session.sessionKeypair);
-      const walletSigned = await this.provider.wallet.signTransaction(tx);
-      sig = await this.provider.connection.sendRawTransaction(walletSigned.serialize());
-    } else {
-      // Wallet signs — single popup for all 3 instructions
-      const signed = await this.provider.wallet.signTransaction(tx);
-      sig = await this.provider.connection.sendRawTransaction(signed.serialize());
-    }
-
-    await this.provider.connection.confirmTransaction(sig, "confirmed");
-    console.log("✅ Private post created + permissioned + delegated in 1 TX:", sig);
-
-    rpcCache.invalidate("allPosts");
-    rpcCache.invalidate("allPostsDelegated");
-    return { sig };
-  }
-
   // ========== HELPER: Full private chat flow ==========
 
   async createPrivateChat(
@@ -1847,12 +1654,11 @@ export {
   getPostPda,
   getChatPda,
   getMessagePda,
-  getFriendListPda,
+  getFollowPda,
   getPermissionPda,
   getDelegationBufferPda,
   getDelegationRecordPda,
   getDelegationMetadataPda,
-  getFriendRequestPda,
   getConversationPda,
   toLEBytes,
   PROGRAM_ID,

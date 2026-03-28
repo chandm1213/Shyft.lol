@@ -14,229 +14,6 @@ export type Shadowspace = {
   },
   "instructions": [
     {
-      "name": "acceptFriendRequest",
-      "discriminator": [
-        54,
-        73,
-        153,
-        144,
-        199,
-        113,
-        176,
-        81
-      ],
-      "accounts": [
-        {
-          "name": "friendRequest",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  101,
-                  113
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.from",
-                "account": "friendRequest"
-              },
-              {
-                "kind": "account",
-                "path": "acceptor"
-              }
-            ]
-          }
-        },
-        {
-          "name": "acceptorFriendList",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "acceptor"
-              }
-            ]
-          }
-        },
-        {
-          "name": "senderFriendList",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.from",
-                "account": "friendRequest"
-              }
-            ]
-          }
-        },
-        {
-          "name": "acceptorProfile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  102,
-                  105,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "acceptor"
-              }
-            ]
-          }
-        },
-        {
-          "name": "senderProfile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  102,
-                  105,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.from",
-                "account": "friendRequest"
-              }
-            ]
-          }
-        },
-        {
-          "name": "acceptor",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "addFriend",
-      "discriminator": [
-        6,
-        45,
-        26,
-        157,
-        246,
-        216,
-        236,
-        32
-      ],
-      "accounts": [
-        {
-          "name": "friendList",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "profile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  102,
-                  105,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user",
-          "writable": true,
-          "signer": true
-        }
-      ],
-      "args": [
-        {
-          "name": "friend",
-          "type": "pubkey"
-        }
-      ]
-    },
-    {
       "name": "appendMessage",
       "docs": [
         "Append a message — runs inside ER, FREE"
@@ -507,7 +284,39 @@ export type Shadowspace = {
           }
         },
         {
+          "name": "commenterProfile",
+          "docs": [
+            "The commenter's profile — used to resolve real wallet for session keys"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "commenter_profile.owner",
+                "account": "profile"
+              }
+            ]
+          }
+        },
+        {
           "name": "author",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -539,7 +348,8 @@ export type Shadowspace = {
       "name": "createConversation",
       "docs": [
         "Create an ephemeral conversation inside MagicBlock ER.",
-        "Profile PDA sponsors the account rent inside the rollup."
+        "Profile PDA sponsors the account rent inside the rollup.",
+        "`message_capacity` — pre-allocate space for this many messages (avoids realloc)."
       ],
       "discriminator": [
         30,
@@ -651,56 +461,12 @@ export type Shadowspace = {
           "address": "Magic11111111111111111111111111111111111111"
         }
       ],
-      "args": []
-    },
-    {
-      "name": "createFriendList",
-      "discriminator": [
-        210,
-        132,
-        50,
-        211,
-        101,
-        181,
-        41,
-        136
-      ],
-      "accounts": [
+      "args": [
         {
-          "name": "friendList",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
+          "name": "messageCapacity",
+          "type": "u32"
         }
-      ],
-      "args": []
+      ]
     },
     {
       "name": "createPermission",
@@ -788,7 +554,8 @@ export type Shadowspace = {
               },
               {
                 "kind": "account",
-                "path": "author"
+                "path": "profile.owner",
+                "account": "profile"
               },
               {
                 "kind": "arg",
@@ -816,13 +583,19 @@ export type Shadowspace = {
               },
               {
                 "kind": "account",
-                "path": "author"
+                "path": "profile.owner",
+                "account": "profile"
               }
             ]
           }
         },
         {
           "name": "author",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -1410,6 +1183,109 @@ export type Shadowspace = {
       ]
     },
     {
+      "name": "followUser",
+      "discriminator": [
+        126,
+        176,
+        97,
+        36,
+        63,
+        145,
+        4,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "followAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  111,
+                  108,
+                  108,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "follower_profile.owner",
+                "account": "profile"
+              },
+              {
+                "kind": "account",
+                "path": "following_profile.owner",
+                "account": "profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "followerProfile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "followingProfile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "following_profile.owner",
+                "account": "profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "likePost",
       "discriminator": [
         45,
@@ -1444,6 +1320,33 @@ export type Shadowspace = {
               {
                 "kind": "arg",
                 "path": "postId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "The user's profile — used to resolve real wallet for session keys"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "profile.owner",
+                "account": "profile"
               }
             ]
           }
@@ -1538,7 +1441,8 @@ export type Shadowspace = {
               },
               {
                 "kind": "account",
-                "path": "user"
+                "path": "reactor_profile.owner",
+                "account": "profile"
               }
             ]
           }
@@ -1569,7 +1473,39 @@ export type Shadowspace = {
           }
         },
         {
+          "name": "reactorProfile",
+          "docs": [
+            "The reactor's profile — used to resolve real wallet for session keys + reaction PDA"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "reactor_profile.owner",
+                "account": "profile"
+              }
+            ]
+          }
+        },
+        {
           "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -1592,180 +1528,6 @@ export type Shadowspace = {
           "type": "u8"
         }
       ]
-    },
-    {
-      "name": "rejectFriendRequest",
-      "discriminator": [
-        243,
-        76,
-        240,
-        130,
-        11,
-        66,
-        118,
-        113
-      ],
-      "accounts": [
-        {
-          "name": "friendRequest",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  101,
-                  113
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.from",
-                "account": "friendRequest"
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.to",
-                "account": "friendRequest"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user",
-          "signer": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "removeFriend",
-      "discriminator": [
-        20,
-        242,
-        121,
-        78,
-        224,
-        41,
-        145,
-        64
-      ],
-      "accounts": [
-        {
-          "name": "friendList",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "profile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  102,
-                  105,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user",
-          "writable": true,
-          "signer": true
-        }
-      ],
-      "args": [
-        {
-          "name": "friend",
-          "type": "pubkey"
-        }
-      ]
-    },
-    {
-      "name": "sendFriendRequest",
-      "discriminator": [
-        26,
-        246,
-        211,
-        226,
-        34,
-        70,
-        151,
-        20
-      ],
-      "accounts": [
-        {
-          "name": "friendRequest",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  101,
-                  113
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "from"
-              },
-              {
-                "kind": "account",
-                "path": "to"
-              }
-            ]
-          }
-        },
-        {
-          "name": "from",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "to"
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
     },
     {
       "name": "sendMessage",
@@ -2012,6 +1774,105 @@ export type Shadowspace = {
       "args": []
     },
     {
+      "name": "unfollowUser",
+      "discriminator": [
+        204,
+        183,
+        196,
+        110,
+        97,
+        165,
+        226,
+        213
+      ],
+      "accounts": [
+        {
+          "name": "followAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  111,
+                  108,
+                  108,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "follower_profile.owner",
+                "account": "profile"
+              },
+              {
+                "kind": "account",
+                "path": "following_profile.owner",
+                "account": "profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "followerProfile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "followingProfile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "following_profile.owner",
+                "account": "profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "updateProfilePrivacy",
       "discriminator": [
         1,
@@ -2111,29 +1972,16 @@ export type Shadowspace = {
       ]
     },
     {
-      "name": "friendList",
+      "name": "followAccount",
       "discriminator": [
-        97,
-        237,
-        189,
-        201,
-        11,
-        250,
-        48,
-        40
-      ]
-    },
-    {
-      "name": "friendRequest",
-      "discriminator": [
-        110,
-        87,
-        16,
-        62,
-        238,
-        166,
-        117,
-        252
+        174,
+        177,
+        136,
+        60,
+        138,
+        84,
+        148,
+        209
       ]
     },
     {
@@ -2205,13 +2053,13 @@ export type Shadowspace = {
   "errors": [
     {
       "code": 6000,
-      "name": "alreadyFriends",
-      "msg": "Already friends with this user"
+      "name": "alreadyFollowing",
+      "msg": "Already following this user"
     },
     {
       "code": 6001,
-      "name": "notFriends",
-      "msg": "Not friends with this user"
+      "name": "notFollowing",
+      "msg": "Not following this user"
     },
     {
       "code": 6002,
@@ -2225,8 +2073,8 @@ export type Shadowspace = {
     },
     {
       "code": 6004,
-      "name": "requestNotPending",
-      "msg": "Friend request is not pending"
+      "name": "cannotFollowSelf",
+      "msg": "Cannot follow yourself"
     },
     {
       "code": 6005,
@@ -2295,10 +2143,14 @@ export type Shadowspace = {
             ]
           },
           {
-            "name": "friendList",
+            "name": "follow",
             "fields": [
               {
-                "name": "owner",
+                "name": "follower",
+                "type": "pubkey"
+              },
+              {
+                "name": "following",
                 "type": "pubkey"
               }
             ]
@@ -2325,19 +2177,6 @@ export type Shadowspace = {
               },
               {
                 "name": "user",
-                "type": "pubkey"
-              }
-            ]
-          },
-          {
-            "name": "friendRequest",
-            "fields": [
-              {
-                "name": "from",
-                "type": "pubkey"
-              },
-              {
-                "name": "to",
                 "type": "pubkey"
               }
             ]
@@ -2452,39 +2291,17 @@ export type Shadowspace = {
       }
     },
     {
-      "name": "friendList",
+      "name": "followAccount",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "owner",
+            "name": "follower",
             "type": "pubkey"
           },
           {
-            "name": "friends",
-            "type": {
-              "vec": "pubkey"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "name": "friendRequest",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "from",
+            "name": "following",
             "type": "pubkey"
-          },
-          {
-            "name": "to",
-            "type": "pubkey"
-          },
-          {
-            "name": "status",
-            "type": "u8"
           },
           {
             "name": "createdAt",
@@ -2611,7 +2428,11 @@ export type Shadowspace = {
             "type": "u64"
           },
           {
-            "name": "friendCount",
+            "name": "followerCount",
+            "type": "u64"
+          },
+          {
+            "name": "followingCount",
             "type": "u64"
           },
           {

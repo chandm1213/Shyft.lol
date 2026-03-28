@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, UserPlus, UserCheck, UserX, Clock, Users, Check, X, RefreshCw, Globe } from "lucide-react";
+import { Search, UserPlus, UserMinus, UserCheck, Users, RefreshCw, Globe } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
 import { useProgram } from "@/hooks/useProgram";
@@ -9,29 +9,10 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { clearRpcCache } from "@/lib/program";
 
-function timeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
 interface SearchResult {
   owner: string;
   username: string;
   displayName: string;
-}
-
-interface FriendRequestData {
-  publicKey: string;
-  from: string;
-  to: string;
-  status: number;
-  createdAt: string;
 }
 
 export default function Friends() {
@@ -42,44 +23,40 @@ export default function Friends() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const [incomingRequests, setIncomingRequests] = useState<FriendRequestData[]>([]);
-  const [outgoingRequests, setOutgoingRequests] = useState<FriendRequestData[]>([]);
-  const [friends, setFriends] = useState<PublicKey[]>([]);
+  const [following, setFollowing] = useState<string[]>([]);
+  const [followers, setFollowers] = useState<string[]>([]);
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
-  const [sendingTo, setSendingTo] = useState<string | null>(null);
-  const [acceptingFrom, setAcceptingFrom] = useState<string | null>(null);
-  const [rejectingKey, setRejectingKey] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<"search" | "incoming" | "outgoing" | "list">("search");
+  const [followingUser, setFollowingUser] = useState<string | null>(null);
+  const [unfollowingUser, setUnfollowingUser] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<"search" | "following" | "followers">("search");
 
-  // Fetch all friend data
-  const fetchFriendData = async () => {
+  // Fetch follow data
+  const fetchFollowData = async () => {
     if (!program || !publicKey) return;
     setLoading(true);
     clearRpcCache();
     try {
-      const [incoming, outgoing, friendList, profiles] = await Promise.all([
-        program.getIncomingRequests(publicKey),
-        program.getOutgoingRequests(publicKey),
-        program.getFriendList(publicKey),
+      const [followingList, followersList, profiles] = await Promise.all([
+        program.getFollowing(publicKey),
+        program.getFollowers(publicKey),
         program.getAllProfiles(),
       ]);
 
-      setIncomingRequests(incoming);
-      setOutgoingRequests(outgoing);
-      setFriends(friendList?.friends || []);
+      setFollowing(followingList);
+      setFollowers(followersList);
 
       const map: Record<string, any> = {};
       profiles.forEach((p: any) => { map[p.owner] = p; });
       setProfileMap(map);
     } catch (err) {
-      console.error("Failed to fetch friend data:", err);
+      console.error("Failed to fetch follow data:", err);
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchFriendData();
+    fetchFollowData();
   }, [program, publicKey]);
 
   // Search by username
@@ -88,7 +65,6 @@ export default function Friends() {
     setSearching(true);
     try {
       const results = await program.searchByUsername(searchQuery.trim());
-      // Filter out self
       const myAddr = publicKey?.toBase58() || "";
       setSearchResults(results.filter((r) => r.owner !== myAddr));
     } catch (err) {
@@ -106,77 +82,57 @@ export default function Friends() {
     }
   }, [searchQuery, program]);
 
-  // Send friend request
-  const handleSendRequest = async (toAddress: string) => {
-    if (!program || sendingTo) return;
-    setSendingTo(toAddress);
+  // Follow user
+  const handleFollow = async (targetAddress: string) => {
+    if (!program || followingUser) return;
+    setFollowingUser(targetAddress);
     try {
-      const toPubkey = new PublicKey(toAddress);
-      await program.sendFriendRequest(toPubkey);
-      toast("success", "Friend request sent! 🤝", "They'll see it in their incoming requests");
+      const targetPubkey = new PublicKey(targetAddress);
+      await program.followUser(targetPubkey);
+      toast("success", "Following! 🎉", "You're now following this user");
       setSearchQuery("");
       setSearchResults([]);
-      await fetchFriendData();
+      await fetchFollowData();
     } catch (err: any) {
-      console.error("Send request error:", err);
+      console.error("Follow error:", err);
       if (err?.message?.includes("User rejected")) {
-        toast("error", "Request cancelled", "You rejected the transaction");
-      } else if (err?.message?.includes("already in use") || err?.message?.includes("init_if_needed")) {
-        toast("error", "Already sent", "You've already sent a request to this user");
+        toast("error", "Cancelled", "You rejected the transaction");
+      } else if (err?.message?.includes("already in use") || err?.message?.includes("AlreadyFollowing")) {
+        toast("error", "Already following", "You're already following this user");
       } else {
-        toast("error", "Failed to send request", err?.message?.slice(0, 80) || "Please try again");
+        toast("error", "Failed to follow", err?.message?.slice(0, 80) || "Please try again");
       }
     }
-    setSendingTo(null);
+    setFollowingUser(null);
   };
 
-  // Accept friend request
-  const handleAccept = async (fromAddress: string) => {
-    if (!program || acceptingFrom) return;
-    setAcceptingFrom(fromAddress);
+  // Unfollow user
+  const handleUnfollow = async (targetAddress: string) => {
+    if (!program || unfollowingUser) return;
+    setUnfollowingUser(targetAddress);
     try {
-      const fromPubkey = new PublicKey(fromAddress);
-
-      await program.acceptFriendRequest(fromPubkey);
-      toast("success", "Friend added! 🎉", "You're now friends — you can see each other's private posts");
-      await fetchFriendData();
+      const targetPubkey = new PublicKey(targetAddress);
+      await program.unfollowUser(targetPubkey);
+      toast("success", "Unfollowed", "You've unfollowed this user");
+      await fetchFollowData();
     } catch (err: any) {
-      console.error("Accept error:", err);
+      console.error("Unfollow error:", err);
       if (err?.message?.includes("User rejected")) {
         toast("error", "Cancelled", "You rejected the transaction");
       } else {
-        toast("error", "Failed to accept", err?.message?.slice(0, 80) || "Please try again");
+        toast("error", "Failed to unfollow", err?.message?.slice(0, 80) || "Please try again");
       }
     }
-    setAcceptingFrom(null);
+    setUnfollowingUser(null);
   };
 
-  // Reject friend request
-  const handleReject = async (fromAddress: string, toAddress: string) => {
-    if (!program || rejectingKey) return;
-    setRejectingKey(fromAddress);
-    try {
-      const fromPubkey = new PublicKey(fromAddress);
-      const toPubkey = new PublicKey(toAddress);
-      await program.rejectFriendRequest(fromPubkey, toPubkey);
-      toast("success", "Request rejected", "The friend request has been declined");
-      await fetchFriendData();
-    } catch (err: any) {
-      console.error("Reject error:", err);
-      if (err?.message?.includes("User rejected")) {
-        toast("error", "Cancelled", "You rejected the transaction");
-      } else {
-        toast("error", "Failed to reject", err?.message?.slice(0, 80) || "Please try again");
-      }
-    }
-    setRejectingKey(null);
-  };
-
-  // Helper: get status of a search result
-  const getRequestStatus = (ownerAddr: string): "none" | "sent" | "incoming" | "friend" => {
-    if (friends.some((f) => f.toBase58() === ownerAddr)) return "friend";
-    if (outgoingRequests.some((r) => r.to === ownerAddr)) return "sent";
-    if (incomingRequests.some((r) => r.from === ownerAddr)) return "incoming";
+  // Helper: get follow status of a search result
+  const getFollowStatus = (ownerAddr: string): "none" | "following" | "follows_you" | "mutual" => {
+    const iFollow = following.includes(ownerAddr);
+    const theyFollow = followers.includes(ownerAddr);
+    if (iFollow && theyFollow) return "mutual";
+    if (iFollow) return "following";
+    if (theyFollow) return "follows_you";
     return "none";
   };
 
@@ -187,8 +143,8 @@ export default function Friends() {
           <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center mx-auto mb-4">
             <Users className="w-8 h-8 text-[#2563EB]" />
           </div>
-          <h3 className="text-lg font-bold text-[#1A1A2E] mb-2">Find Friends</h3>
-          <p className="text-sm text-[#64748B] max-w-sm mx-auto">Connect your wallet to search for friends by username and send friend requests on-chain.</p>
+          <h3 className="text-lg font-bold text-[#1A1A2E] mb-2">Find People</h3>
+          <p className="text-sm text-[#64748B] max-w-sm mx-auto">Connect your wallet to discover people and follow them on-chain.</p>
         </div>
       </div>
     );
@@ -199,10 +155,9 @@ export default function Friends() {
       {/* Section Tabs */}
       <div className="flex gap-1 bg-[#F1F5F9] rounded-xl p-1">
         {[
-          { id: "search" as const, label: "Search", icon: Search, count: 0 },
-          { id: "incoming" as const, label: "Incoming", icon: UserPlus, count: incomingRequests.length },
-          { id: "outgoing" as const, label: "Sent", icon: Clock, count: outgoingRequests.length },
-          { id: "list" as const, label: "Friends", icon: Users, count: friends.length },
+          { id: "search" as const, label: "Discover", icon: Search, count: 0 },
+          { id: "following" as const, label: "Following", icon: UserPlus, count: following.length },
+          { id: "followers" as const, label: "Followers", icon: Users, count: followers.length },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -226,7 +181,7 @@ export default function Friends() {
         ))}
       </div>
 
-      {/* Search Section */}
+      {/* Search / Discover Section */}
       {activeSection === "search" && (
         <div className="space-y-3">
           <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4">
@@ -259,7 +214,7 @@ export default function Friends() {
             {searchResults.length > 0 && (
               <div className="mt-3 space-y-2">
                 {searchResults.map((result) => {
-                  const status = getRequestStatus(result.owner);
+                  const status = getFollowStatus(result.owner);
                   return (
                     <div key={result.owner} className="flex items-center gap-3 p-3 rounded-xl bg-[#F8FAFC] hover:bg-[#F1F5F9] transition-colors">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-lg border-2 border-white shadow-sm flex-shrink-0">
@@ -268,39 +223,47 @@ export default function Friends() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="font-semibold text-[#1A1A2E] text-sm truncate">{result.displayName || result.username}</span>
+                          {status === "mutual" && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#F0FDF4] text-[#16A34A] font-medium">Mutual</span>
+                          )}
                         </div>
                         <span className="text-xs text-[#94A3B8]">@{result.username}</span>
                       </div>
                       <div className="flex-shrink-0">
-                        {status === "friend" && (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-[#16A34A] bg-[#F0FDF4] px-3 py-1.5 rounded-lg">
-                            <UserCheck className="w-3.5 h-3.5" /> Friends
-                          </span>
-                        )}
-                        {status === "sent" && (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-[#F59E0B] bg-[#FFFBEB] px-3 py-1.5 rounded-lg">
-                            <Clock className="w-3.5 h-3.5" /> Pending
-                          </span>
-                        )}
-                        {status === "incoming" && (
+                        {(status === "following" || status === "mutual") ? (
                           <button
-                            onClick={() => handleAccept(result.owner)}
-                            disabled={!!acceptingFrom}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-white bg-[#16A34A] hover:bg-[#15803d] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                            onClick={() => handleUnfollow(result.owner)}
+                            disabled={unfollowingUser === result.owner}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-[#64748B] bg-[#F1F5F9] hover:text-[#DC2626] hover:bg-[#FEF2F2] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                           >
-                            <Check className="w-3.5 h-3.5" /> Accept
+                            {unfollowingUser === result.owner ? (
+                              <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Unfollowing...</>
+                            ) : (
+                              <><UserCheck className="w-3.5 h-3.5" /> Following</>
+                            )}
                           </button>
-                        )}
-                        {status === "none" && (
+                        ) : status === "follows_you" ? (
                           <button
-                            onClick={() => handleSendRequest(result.owner)}
-                            disabled={sendingTo === result.owner}
+                            onClick={() => handleFollow(result.owner)}
+                            disabled={followingUser === result.owner}
                             className="inline-flex items-center gap-1 text-xs font-medium text-white bg-[#2563EB] hover:bg-[#1D4ED8] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                           >
-                            {sendingTo === result.owner ? (
-                              <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Sending...</>
+                            {followingUser === result.owner ? (
+                              <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Following...</>
                             ) : (
-                              <><UserPlus className="w-3.5 h-3.5" /> Add Friend</>
+                              <><UserPlus className="w-3.5 h-3.5" /> Follow Back</>
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleFollow(result.owner)}
+                            disabled={followingUser === result.owner}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-white bg-[#2563EB] hover:bg-[#1D4ED8] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            {followingUser === result.owner ? (
+                              <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Following...</>
+                            ) : (
+                              <><UserPlus className="w-3.5 h-3.5" /> Follow</>
                             )}
                           </button>
                         )}
@@ -315,20 +278,20 @@ export default function Friends() {
           {searchQuery.length < 2 && !searching && (
             <div className="bg-[#F8FAFC] rounded-xl p-6 text-center border border-[#E2E8F0]">
               <Search className="w-8 h-8 text-[#94A3B8] mx-auto mb-2" />
-              <p className="text-sm text-[#94A3B8]">Search for users by their username or display name</p>
+              <p className="text-sm text-[#94A3B8]">Discover people by their username or display name</p>
               <p className="text-xs text-[#CBD5E1] mt-1">Type at least 2 characters to start searching</p>
             </div>
           )}
         </div>
       )}
 
-      {/* Incoming Requests */}
-      {activeSection === "incoming" && (
+      {/* Following Section */}
+      {activeSection === "following" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[#1A1A2E]">Incoming Friend Requests</h3>
+            <h3 className="text-sm font-semibold text-[#1A1A2E]">Following</h3>
             <button
-              onClick={fetchFriendData}
+              onClick={fetchFollowData}
               disabled={loading}
               className="flex items-center gap-1 text-xs text-[#2563EB] hover:text-[#1D4ED8] disabled:opacity-50"
             >
@@ -337,126 +300,49 @@ export default function Friends() {
             </button>
           </div>
 
-          {incomingRequests.length === 0 ? (
+          {following.length === 0 ? (
             <div className="bg-[#F8FAFC] rounded-xl p-6 text-center border border-[#E2E8F0]">
               <UserPlus className="w-8 h-8 text-[#94A3B8] mx-auto mb-2" />
-              <p className="text-sm text-[#94A3B8]">No incoming friend requests</p>
-              <p className="text-xs text-[#CBD5E1] mt-1">When someone sends you a request, it&apos;ll show up here</p>
+              <p className="text-sm text-[#94A3B8]">Not following anyone yet</p>
+              <p className="text-xs text-[#CBD5E1] mt-1">Search for people to follow!</p>
             </div>
           ) : (
-            incomingRequests.map((req) => {
-              const profile = profileMap[req.from];
-              const name = profile?.displayName || req.from.slice(0, 4) + "..." + req.from.slice(-4);
-              const username = profile?.username || req.from.slice(0, 8);
+            following.map((addr) => {
+              const profile = profileMap[addr];
+              const name = profile?.displayName || addr.slice(0, 4) + "..." + addr.slice(-4);
+              const username = profile?.username || addr.slice(0, 8);
+              const theyFollowBack = followers.includes(addr);
               return (
-                <div key={req.publicKey} className="bg-white rounded-2xl border border-[#E2E8F0] p-4 animate-fade-in">
+                <div key={addr} className="bg-white rounded-2xl border border-[#E2E8F0] p-4 animate-fade-in">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#FEF3C7] to-[#FDE68A] flex items-center justify-center text-lg border-2 border-white shadow-sm flex-shrink-0">
-                      🤝
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-lg border-2 border-white shadow-sm flex-shrink-0">
+                      👤
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-[#1A1A2E] text-sm truncate">{name}</span>
                         <span className="text-xs text-[#94A3B8]">@{username}</span>
+                        {theyFollowBack && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#F0FDF4] text-[#16A34A] font-medium">Mutual</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-xs text-[#94A3B8]">
-                          {Number(req.createdAt) > 0 ? timeAgo(Number(req.createdAt) * 1000) : "recently"}
-                        </span>
                         <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-[#2563EB] bg-[#EFF6FF] px-1.5 py-0.5 rounded-full">
                           <Globe className="w-2 h-2" /> on-chain
                         </span>
                       </div>
                     </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => handleAccept(req.from)}
-                        disabled={acceptingFrom === req.from}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-white bg-[#16A34A] hover:bg-[#15803d] px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        {acceptingFrom === req.from ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Check className="w-3.5 h-3.5" />
-                        )}
-                        Accept
-                      </button>
-                      <button
-                        onClick={() => handleReject(req.from, req.to)}
-                        disabled={rejectingKey === req.from}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-[#EF4444] bg-[#FEF2F2] hover:bg-[#FEE2E2] px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        {rejectingKey === req.from ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <X className="w-3.5 h-3.5" />
-                        )}
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-
-      {/* Outgoing Requests */}
-      {activeSection === "outgoing" && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[#1A1A2E]">Sent Friend Requests</h3>
-            <button
-              onClick={fetchFriendData}
-              disabled={loading}
-              className="flex items-center gap-1 text-xs text-[#2563EB] hover:text-[#1D4ED8] disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-          </div>
-
-          {outgoingRequests.length === 0 ? (
-            <div className="bg-[#F8FAFC] rounded-xl p-6 text-center border border-[#E2E8F0]">
-              <Clock className="w-8 h-8 text-[#94A3B8] mx-auto mb-2" />
-              <p className="text-sm text-[#94A3B8]">No pending sent requests</p>
-              <p className="text-xs text-[#CBD5E1] mt-1">Search for a username to send a friend request</p>
-            </div>
-          ) : (
-            outgoingRequests.map((req) => {
-              const profile = profileMap[req.to];
-              const name = profile?.displayName || req.to.slice(0, 4) + "..." + req.to.slice(-4);
-              const username = profile?.username || req.to.slice(0, 8);
-              return (
-                <div key={req.publicKey} className="bg-white rounded-2xl border border-[#E2E8F0] p-4 animate-fade-in">
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#EFF6FF] to-[#E0F2FE] flex items-center justify-center text-lg border-2 border-white shadow-sm flex-shrink-0">
-                      ⏳
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-[#1A1A2E] text-sm truncate">{name}</span>
-                        <span className="text-xs text-[#94A3B8]">@{username}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-xs text-[#F59E0B]">Awaiting response</span>
-                        <span className="text-xs text-[#94A3B8]">
-                          {Number(req.createdAt) > 0 ? timeAgo(Number(req.createdAt) * 1000) : "recently"}
-                        </span>
-                      </div>
-                    </div>
                     <button
-                      onClick={() => handleReject(req.from, req.to)}
-                      disabled={rejectingKey === req.from}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-[#94A3B8] hover:text-[#EF4444] bg-[#F1F5F9] hover:bg-[#FEF2F2] px-3 py-2 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                      onClick={() => handleUnfollow(addr)}
+                      disabled={unfollowingUser === addr}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-[#64748B] bg-[#F1F5F9] hover:text-[#DC2626] hover:bg-[#FEF2F2] px-3 py-2 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
                     >
-                      {rejectingKey === req.from ? (
+                      {unfollowingUser === addr ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       ) : (
-                        <X className="w-3.5 h-3.5" />
+                        <UserMinus className="w-3.5 h-3.5" />
                       )}
-                      Cancel
+                      {unfollowingUser === addr ? "Unfollowing..." : "Unfollow"}
                     </button>
                   </div>
                 </div>
@@ -466,42 +352,77 @@ export default function Friends() {
         </div>
       )}
 
-      {/* Friend List */}
-      {activeSection === "list" && (
+      {/* Followers Section */}
+      {activeSection === "followers" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[#1A1A2E]">Your Friends</h3>
-            <span className="text-xs text-[#94A3B8]">{friends.length} friends</span>
+            <h3 className="text-sm font-semibold text-[#1A1A2E]">Followers</h3>
+            <button
+              onClick={fetchFollowData}
+              disabled={loading}
+              className="flex items-center gap-1 text-xs text-[#2563EB] hover:text-[#1D4ED8] disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
           </div>
 
-          {friends.length === 0 ? (
+          {followers.length === 0 ? (
             <div className="bg-[#F8FAFC] rounded-xl p-6 text-center border border-[#E2E8F0]">
               <Users className="w-8 h-8 text-[#94A3B8] mx-auto mb-2" />
-              <p className="text-sm text-[#94A3B8]">No friends yet</p>
-              <p className="text-xs text-[#CBD5E1] mt-1">Search for someone by username to add them!</p>
+              <p className="text-sm text-[#94A3B8]">No followers yet</p>
+              <p className="text-xs text-[#CBD5E1] mt-1">When someone follows you, they&apos;ll appear here</p>
             </div>
           ) : (
-            friends.map((friend) => {
-              const addr = friend.toBase58();
+            followers.map((addr) => {
               const profile = profileMap[addr];
               const name = profile?.displayName || addr.slice(0, 4) + "..." + addr.slice(-4);
               const username = profile?.username || addr.slice(0, 8);
+              const iFollowThem = following.includes(addr);
               return (
                 <div key={addr} className="bg-white rounded-2xl border border-[#E2E8F0] p-4 animate-fade-in">
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7] flex items-center justify-center text-lg border-2 border-white shadow-sm flex-shrink-0">
-                      ✅
+                      👤
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-[#1A1A2E] text-sm truncate">{name}</span>
                         <span className="text-xs text-[#94A3B8]">@{username}</span>
+                        {iFollowThem && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#F0FDF4] text-[#16A34A] font-medium">Mutual</span>
+                        )}
                       </div>
-                      <span className="text-xs text-[#16A34A]">Friends</span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs text-[#94A3B8]">Follows you</span>
+                      </div>
                     </div>
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-[#16A34A] bg-[#F0FDF4] px-2.5 py-1.5 rounded-lg flex-shrink-0">
-                      <UserCheck className="w-3.5 h-3.5" /> Connected
-                    </span>
+                    {iFollowThem ? (
+                      <button
+                        onClick={() => handleUnfollow(addr)}
+                        disabled={unfollowingUser === addr}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-[#64748B] bg-[#F1F5F9] hover:text-[#DC2626] hover:bg-[#FEF2F2] px-3 py-2 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                      >
+                        {unfollowingUser === addr ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <UserCheck className="w-3.5 h-3.5" />
+                        )}
+                        {unfollowingUser === addr ? "..." : "Following"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleFollow(addr)}
+                        disabled={followingUser === addr}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-white bg-[#2563EB] hover:bg-[#1D4ED8] px-3 py-2 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                      >
+                        {followingUser === addr ? (
+                          <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Following...</>
+                        ) : (
+                          <><UserPlus className="w-3.5 h-3.5" /> Follow Back</>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               );

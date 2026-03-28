@@ -11,7 +11,7 @@ import ProfileSetup from "@/components/ProfileSetup";
 const titles: Record<string, string> = {
   feed: "Feed",
   chat: "Chat",
-  friends: "Friends",
+  friends: "People",
   payments: "Payments",
   dashboard: "Creator Dashboard",
   profile: "Profile",
@@ -20,7 +20,7 @@ const titles: Record<string, string> = {
 const subtitles: Record<string, string> = {
   feed: "Your encrypted feed",
   chat: "End-to-end encrypted",
-  friends: "On-chain friend requests",
+  friends: "Follow & discover people",
   payments: "Private via PER",
   dashboard: "Your content analytics",
   profile: "On-chain identity",
@@ -54,7 +54,8 @@ export default function Header() {
             avatar: "🔒",
             bio: profile.bio || "",
             isPrivate: profile.isPrivate || false,
-            friends: [],
+            followerCount: Number(profile.followerCount?.toString() || 0),
+            followingCount: Number(profile.followingCount?.toString() || 0),
             createdAt: Number(profile.createdAt?.toString() || Date.now()),
           });
         } else {

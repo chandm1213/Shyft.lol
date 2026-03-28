@@ -8,229 +8,6 @@
   },
   "instructions": [
     {
-      "name": "accept_friend_request",
-      "discriminator": [
-        54,
-        73,
-        153,
-        144,
-        199,
-        113,
-        176,
-        81
-      ],
-      "accounts": [
-        {
-          "name": "friend_request",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  101,
-                  113
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.from",
-                "account": "FriendRequest"
-              },
-              {
-                "kind": "account",
-                "path": "acceptor"
-              }
-            ]
-          }
-        },
-        {
-          "name": "acceptor_friend_list",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "acceptor"
-              }
-            ]
-          }
-        },
-        {
-          "name": "sender_friend_list",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.from",
-                "account": "FriendRequest"
-              }
-            ]
-          }
-        },
-        {
-          "name": "acceptor_profile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  102,
-                  105,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "acceptor"
-              }
-            ]
-          }
-        },
-        {
-          "name": "sender_profile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  102,
-                  105,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.from",
-                "account": "FriendRequest"
-              }
-            ]
-          }
-        },
-        {
-          "name": "acceptor",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "add_friend",
-      "discriminator": [
-        6,
-        45,
-        26,
-        157,
-        246,
-        216,
-        236,
-        32
-      ],
-      "accounts": [
-        {
-          "name": "friend_list",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "profile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  102,
-                  105,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user",
-          "writable": true,
-          "signer": true
-        }
-      ],
-      "args": [
-        {
-          "name": "friend",
-          "type": "pubkey"
-        }
-      ]
-    },
-    {
       "name": "append_message",
       "docs": [
         "Append a message — runs inside ER, FREE"
@@ -533,6 +310,11 @@
           "signer": true
         },
         {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         },
@@ -681,55 +463,6 @@
       ]
     },
     {
-      "name": "create_friend_list",
-      "discriminator": [
-        210,
-        132,
-        50,
-        211,
-        101,
-        181,
-        41,
-        136
-      ],
-      "accounts": [
-        {
-          "name": "friend_list",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
       "name": "create_permission",
       "discriminator": [
         190,
@@ -852,6 +585,11 @@
         },
         {
           "name": "author",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -1439,6 +1177,109 @@
       ]
     },
     {
+      "name": "follow_user",
+      "discriminator": [
+        126,
+        176,
+        97,
+        36,
+        63,
+        145,
+        4,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "follow_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  111,
+                  108,
+                  108,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "follower_profile.owner",
+                "account": "Profile"
+              },
+              {
+                "kind": "account",
+                "path": "following_profile.owner",
+                "account": "Profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "follower_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "following_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "following_profile.owner",
+                "account": "Profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "like_post",
       "discriminator": [
         45,
@@ -1658,6 +1499,11 @@
           "signer": true
         },
         {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         },
@@ -1676,180 +1522,6 @@
           "type": "u8"
         }
       ]
-    },
-    {
-      "name": "reject_friend_request",
-      "discriminator": [
-        243,
-        76,
-        240,
-        130,
-        11,
-        66,
-        118,
-        113
-      ],
-      "accounts": [
-        {
-          "name": "friend_request",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  101,
-                  113
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.from",
-                "account": "FriendRequest"
-              },
-              {
-                "kind": "account",
-                "path": "friend_request.to",
-                "account": "FriendRequest"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user",
-          "signer": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "remove_friend",
-      "discriminator": [
-        20,
-        242,
-        121,
-        78,
-        224,
-        41,
-        145,
-        64
-      ],
-      "accounts": [
-        {
-          "name": "friend_list",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  105,
-                  101,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "profile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  102,
-                  105,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user",
-          "writable": true,
-          "signer": true
-        }
-      ],
-      "args": [
-        {
-          "name": "friend",
-          "type": "pubkey"
-        }
-      ]
-    },
-    {
-      "name": "send_friend_request",
-      "discriminator": [
-        26,
-        246,
-        211,
-        226,
-        34,
-        70,
-        151,
-        20
-      ],
-      "accounts": [
-        {
-          "name": "friend_request",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  102,
-                  114,
-                  101,
-                  113
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "from"
-              },
-              {
-                "kind": "account",
-                "path": "to"
-              }
-            ]
-          }
-        },
-        {
-          "name": "from",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "to"
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
     },
     {
       "name": "send_message",
@@ -2096,6 +1768,105 @@
       "args": []
     },
     {
+      "name": "unfollow_user",
+      "discriminator": [
+        204,
+        183,
+        196,
+        110,
+        97,
+        165,
+        226,
+        213
+      ],
+      "accounts": [
+        {
+          "name": "follow_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  111,
+                  108,
+                  108,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "follower_profile.owner",
+                "account": "Profile"
+              },
+              {
+                "kind": "account",
+                "path": "following_profile.owner",
+                "account": "Profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "follower_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "following_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "following_profile.owner",
+                "account": "Profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "update_profile_privacy",
       "discriminator": [
         1,
@@ -2195,29 +1966,16 @@
       ]
     },
     {
-      "name": "FriendList",
+      "name": "FollowAccount",
       "discriminator": [
-        97,
-        237,
-        189,
-        201,
-        11,
-        250,
-        48,
-        40
-      ]
-    },
-    {
-      "name": "FriendRequest",
-      "discriminator": [
-        110,
-        87,
-        16,
-        62,
-        238,
-        166,
-        117,
-        252
+        174,
+        177,
+        136,
+        60,
+        138,
+        84,
+        148,
+        209
       ]
     },
     {
@@ -2289,13 +2047,13 @@
   "errors": [
     {
       "code": 6000,
-      "name": "AlreadyFriends",
-      "msg": "Already friends with this user"
+      "name": "AlreadyFollowing",
+      "msg": "Already following this user"
     },
     {
       "code": 6001,
-      "name": "NotFriends",
-      "msg": "Not friends with this user"
+      "name": "NotFollowing",
+      "msg": "Not following this user"
     },
     {
       "code": 6002,
@@ -2309,8 +2067,8 @@
     },
     {
       "code": 6004,
-      "name": "RequestNotPending",
-      "msg": "Friend request is not pending"
+      "name": "CannotFollowSelf",
+      "msg": "Cannot follow yourself"
     },
     {
       "code": 6005,
@@ -2379,10 +2137,14 @@
             ]
           },
           {
-            "name": "FriendList",
+            "name": "Follow",
             "fields": [
               {
-                "name": "owner",
+                "name": "follower",
+                "type": "pubkey"
+              },
+              {
+                "name": "following",
                 "type": "pubkey"
               }
             ]
@@ -2409,19 +2171,6 @@
               },
               {
                 "name": "user",
-                "type": "pubkey"
-              }
-            ]
-          },
-          {
-            "name": "FriendRequest",
-            "fields": [
-              {
-                "name": "from",
-                "type": "pubkey"
-              },
-              {
-                "name": "to",
                 "type": "pubkey"
               }
             ]
@@ -2536,39 +2285,17 @@
       }
     },
     {
-      "name": "FriendList",
+      "name": "FollowAccount",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "owner",
+            "name": "follower",
             "type": "pubkey"
           },
           {
-            "name": "friends",
-            "type": {
-              "vec": "pubkey"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "name": "FriendRequest",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "from",
+            "name": "following",
             "type": "pubkey"
-          },
-          {
-            "name": "to",
-            "type": "pubkey"
-          },
-          {
-            "name": "status",
-            "type": "u8"
           },
           {
             "name": "created_at",
@@ -2695,7 +2422,11 @@
             "type": "u64"
           },
           {
-            "name": "friend_count",
+            "name": "follower_count",
+            "type": "u64"
+          },
+          {
+            "name": "following_count",
             "type": "u64"
           },
           {

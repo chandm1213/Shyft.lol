@@ -22,11 +22,11 @@ const slides = [
     id: 2,
     title: "Encrypted Feed",
     subtitle: "Share Privately",
-    description: "Post your thoughts publicly or encrypt them for selected friends. All powered by advanced cryptography.",
+    description: "Post your thoughts on-chain for everyone to see. Build your social graph with followers and following.",
     icon: Lock,
     gradient: "from-[#2563EB] to-[#16A34A]",
     accentColor: "bg-blue-50",
-    features: ["Private & Public Posts", "End-to-End Encrypted", "No Central Server"],
+    features: ["Public Posts", "On-Chain Social", "Session Keys"],
   },
   {
     id: 3,
@@ -56,7 +56,7 @@ const slides = [
     icon: User,
     gradient: "from-[#EC4899] to-[#BE185D]",
     accentColor: "bg-pink-50",
-    features: ["Verifiable Profile", "Friend Network", "Privacy Controls"],
+    features: ["Verifiable Profile", "Follow Network", "Privacy Controls"],
   },
   {
     id: 6,

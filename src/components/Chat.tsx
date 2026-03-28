@@ -19,7 +19,7 @@ function timeAgo(timestamp: number): string {
   return `${days}d`;
 }
 
-interface FriendInfo {
+interface ContactInfo {
   pubkey: PublicKey;
   address: string;
   displayName: string;
@@ -30,8 +30,8 @@ interface FriendInfo {
 
 interface ChatInfo {
   friendAddress: string;
-  friend: FriendInfo;
-  hasConversation: boolean; // ephemeral conversation exists in ER
+  friend: ContactInfo;
+  hasConversation: boolean;
   lastMessage: string;
   lastMessageTime: number;
 }
@@ -48,7 +48,7 @@ export default function Chat() {
   const { sendPayment } = usePrivatePayment();
 
   // State
-  const [friends, setFriends] = useState<FriendInfo[]>([]);
+  const [friends, setFriends] = useState<ContactInfo[]>([]);
   const [chats, setChats] = useState<ChatInfo[]>([]);
   const [activeChat, setActiveChat] = useState<ChatInfo | null>(null);
   const [messages, setMessages] = useState<EphemeralMsg[]>([]);
@@ -74,46 +74,37 @@ export default function Chat() {
     program.isProfileDelegated().then(setProfileDelegated).catch(() => {});
   }, [program, publicKey]);
 
-  // Load friends list
+  // Load contacts (people you follow / mutual follows)
   const loadFriendsAndChats = useCallback(async () => {
     if (!program || !publicKey) return;
     setLoading(true);
     try {
-      const [friendList, profiles] = await Promise.all([
-        program.getFriendList(publicKey),
+      const [followingList, followersList, profiles] = await Promise.all([
+        program.getFollowing(publicKey),
+        program.getFollowers(publicKey),
         program.getAllProfiles(),
       ]);
-      const friendPubkeys: PublicKey[] = friendList?.friends || [];
 
       const profileMap: Record<string, any> = {};
       profiles.forEach((p: any) => { profileMap[p.owner] = p; });
 
-      const mutualChecks = await Promise.all(
-        friendPubkeys.map(async (fPubkey) => {
-          try {
-            const theirFriends = await program.getFriendList(fPubkey);
-            return (theirFriends?.friends || []).some((f: PublicKey) => f.equals(publicKey));
-          } catch { return false; }
-        })
-      );
-
-      const friendInfos: FriendInfo[] = friendPubkeys.map((fPubkey, i) => {
-        const fAddr = fPubkey.toBase58();
-        const profile = profileMap[fAddr];
+      // Build contact list from people you follow
+      const contactInfos: ContactInfo[] = followingList.map((addr: string) => {
+        const profile = profileMap[addr];
+        const isMutual = followersList.includes(addr);
         return {
-          pubkey: fPubkey,
-          address: fAddr,
-          displayName: profile?.displayName || profile?.display_name || fAddr.slice(0, 4) + "..." + fAddr.slice(-4),
-          username: profile?.username || fAddr.slice(0, 8),
-          avatar: mutualChecks[i] ? "👥" : "👤",
-          isMutual: mutualChecks[i],
+          pubkey: new PublicKey(addr),
+          address: addr,
+          displayName: profile?.displayName || profile?.display_name || addr.slice(0, 4) + "..." + addr.slice(-4),
+          username: profile?.username || addr.slice(0, 8),
+          avatar: isMutual ? "👥" : "👤",
+          isMutual,
         };
       });
-      setFriends(friendInfos);
+      setFriends(contactInfos);
 
-      // Check which friends have an existing ephemeral conversation
       const chatInfos: ChatInfo[] = [];
-      for (const friend of friendInfos) {
+      for (const friend of contactInfos) {
         const hasConv = await program.conversationExists(publicKey, friend.pubkey);
         let lastMsg = "";
         let lastTime = 0;
@@ -204,9 +195,9 @@ export default function Chat() {
     }
   };
 
-  /** Set up ephemeral chat: delegate profile → create conversations for ALL friends → undelegate.
-   *  This way the user only pays the delegation cost ONCE, not per-friend. */
-  const setupEphemeralChat = async (friend: FriendInfo): Promise<boolean> => {
+  /** Set up ephemeral chat: delegate profile → create conversations for ALL mutual follows → undelegate.
+   *  This way the user only pays the delegation cost ONCE, not per-contact. */
+  const setupEphemeralChat = async (friend: ContactInfo): Promise<boolean> => {
     if (!program || !publicKey) return false;
     setSettingUp(true);
     try {
@@ -224,11 +215,11 @@ export default function Chat() {
       await program.waitForProfileOnER(8000);
       console.log("✅ Profile confirmed on ER");
 
-      // Step 3: Create conversations for ALL friends who don't have one yet
-      // This way we only delegate/undelegate ONCE, not per-friend
-      const friendsNeedingConv: FriendInfo[] = [];
+      // Step 3: Create conversations for ALL mutual follows who don't have one yet
+      // This way we only delegate/undelegate ONCE, not per-contact
+      const friendsNeedingConv: ContactInfo[] = [];
       for (const f of friends) {
-        if (!f.isMutual) continue; // only mutual friends
+        if (!f.isMutual) continue; // only mutual follows
         const hasUsable = await program.conversationExists(publicKey, f.pubkey);
         if (!hasUsable) {
           // Check for stale conversations to clean up first
@@ -246,7 +237,7 @@ export default function Chat() {
         }
       }
 
-      // Make sure the target friend is in the list (even if not mutual yet in state)
+      // Make sure the target contact is in the list
       if (!friendsNeedingConv.some(f => f.pubkey.equals(friend.pubkey))) {
         const hasUsable = await program.conversationExists(publicKey, friend.pubkey);
         if (!hasUsable) {
@@ -495,7 +486,7 @@ export default function Chat() {
             <div className="p-6 text-center">
               <MessageCircle className="w-10 h-10 text-[#94A3B8] mx-auto mb-3" />
               <p className="text-sm text-[#94A3B8] mb-1">No chats yet</p>
-              <p className="text-xs text-[#94A3B8]">Add friends in your Profile tab to start chatting</p>
+              <p className="text-xs text-[#94A3B8]">Follow people in the People tab to start chatting</p>
             </div>
           )}
 
@@ -750,12 +741,12 @@ export default function Chat() {
                 <Zap className="w-8 h-8 text-[#7C3AED]" />
               </div>
               <h3 className="font-bold text-[#1A1A2E] mb-1">
-                {chats.length > 0 ? "Select a conversation" : "No friends yet"}
+                {chats.length > 0 ? "Select a conversation" : "No contacts yet"}
               </h3>
               <p className="text-sm text-[#64748B]">
                 {chats.length > 0
                   ? "Ephemeral messaging — free, private & real-time ⚡"
-                  : "Add friends in your Profile to start chatting"}
+                  : "Follow people to start chatting"}
               </p>
               {profileDelegated && (
                 <p className="text-[10px] text-[#7C3AED] mt-2 flex items-center gap-1 justify-center">

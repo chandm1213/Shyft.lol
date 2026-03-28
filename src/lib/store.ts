@@ -12,7 +12,7 @@ interface AppState {
 
   // Feed
   posts: Post[];
-  addPost: (content: string, isPrivate: boolean) => string; // returns post id
+  addPost: (content: string) => string; // returns post id
   removePost: (postId: string) => void;
   toggleLike: (postId: string) => void;
   addComment: (postId: string, content: string) => void;
@@ -35,10 +35,6 @@ interface AppState {
   likedPosts: string[]; // array of post publicKeys the user has liked
   addLikedPost: (postKey: string) => void;
 
-  // Privacy settings
-  friendsOnlyDefault: boolean;
-  setFriendsOnlyDefault: (val: boolean) => void;
-
   // Active tab
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -59,14 +55,13 @@ export const useAppStore = create<AppState>()(
 
   // Feed
   posts: [],
-  addPost: (content, isPrivate) => {
+  addPost: (content) => {
     const user = get().currentUser;
     if (!user) return "";
     const newPost: Post = {
       id: uuidv4(),
       author: user,
       content,
-      isPrivate,
       likes: 0,
       comments: [],
       createdAt: Date.now(),
@@ -185,10 +180,6 @@ export const useAppStore = create<AppState>()(
     likedPosts: state.likedPosts.includes(postKey) ? state.likedPosts : [...state.likedPosts, postKey],
   })),
 
-  // Privacy settings
-  friendsOnlyDefault: true,
-  setFriendsOnlyDefault: (val) => set({ friendsOnlyDefault: val }),
-
   // Navigation
   activeTab: "feed",
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -205,7 +196,6 @@ export const useAppStore = create<AppState>()(
         payments: state.payments,
         onChainComments: state.onChainComments,
         likedPosts: state.likedPosts,
-        friendsOnlyDefault: state.friendsOnlyDefault,
       }),
     }
   )

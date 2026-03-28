@@ -5,7 +5,8 @@ export interface UserProfile {
   avatar: string;
   bio: string;
   isPrivate: boolean;
-  friends: string[];
+  followerCount: number;
+  followingCount: number;
   createdAt: number;
 }
 
@@ -13,7 +14,6 @@ export interface Post {
   id: string;
   author: UserProfile;
   content: string;
-  isPrivate: boolean;
   likes: number;
   comments: Comment[];
   createdAt: number;

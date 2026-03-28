@@ -7,15 +7,15 @@ import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 const features = [
   {
     icon: Shield,
-    title: "Private Posts",
-    description: "Your content is encrypted inside Intel TDX hardware. Only friends you approve can see your posts.",
+    title: "On-Chain Posts",
+    description: "Your posts live on Solana — permanent, censorship-resistant, and fully owned by you.",
     color: "#2563EB",
     bgColor: "#EFF6FF",
     preview: {
       type: "post",
       author: "You",
-      content: "Just shipped a new feature! Only my inner circle can see this...",
-      badge: "Friends Only",
+      content: "Just shipped a new feature! Posted permanently on Solana...",
+      badge: "On-Chain",
     },
   },
   {
@@ -46,13 +46,13 @@ const features = [
   },
   {
     icon: Users,
-    title: "On-Chain Friends",
-    description: "Your friend list lives on Solana. It controls who can decrypt your private content.",
+    title: "Follow Network",
+    description: "Follow anyone on-chain. Build your social graph stored directly on Solana.",
     color: "#16A34A",
     bgColor: "#F0FDF4",
     preview: {
-      type: "friends",
-      count: "Your circle. Your rules.",
+      type: "follows",
+      count: "Your network. Your graph.",
     },
   },
 ];
@@ -203,11 +203,11 @@ export default function Landing() {
                 <div className="w-full animate-fade-in">
                   <div className="bg-white rounded-xl border border-[#E2E8F0] p-4 shadow-sm">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-lg">{"\u{1F512}"}</div>
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-lg">{"\u{1F60E}"}</div>
                       <div>
                         <p className="text-sm font-semibold text-[#1A1A2E]">You</p>
-                        <span className="text-[10px] font-medium text-[#16A34A] bg-[#F0FDF4] px-2 py-0.5 rounded-full">
-                          <Lock className="w-2.5 h-2.5 inline mr-0.5" />Friends Only
+                        <span className="text-[10px] font-medium text-[#2563EB] bg-[#EFF6FF] px-2 py-0.5 rounded-full">
+                          On-Chain
                         </span>
                       </div>
                     </div>
@@ -217,9 +217,9 @@ export default function Landing() {
                       <span>{"\u{1F4AC}"} 3</span>
                     </div>
                   </div>
-                  <div className="mt-3 flex items-center gap-2 justify-center text-[10px] text-[#16A34A]">
+                  <div className="mt-3 flex items-center gap-2 justify-center text-[10px] text-[#2563EB]">
                     <Shield className="w-3 h-3" />
-                    <span>Encrypted in TEE — only authorized wallets can decrypt</span>
+                    <span>Stored permanently on Solana — owned by your wallet</span>
                   </div>
                 </div>
               )}
@@ -289,12 +289,12 @@ export default function Landing() {
                 </div>
               )}
 
-              {features[activeFeature].preview.type === "friends" && (
+              {features[activeFeature].preview.type === "follows" && (
                 <div className="w-full animate-fade-in">
                   <div className="bg-white rounded-xl border border-[#E2E8F0] p-5">
                     <div className="flex items-center gap-2 mb-4">
                       <Users className="w-5 h-5 text-[#16A34A]" />
-                      <p className="text-sm font-semibold text-[#1A1A2E]">On-Chain Friend List</p>
+                      <p className="text-sm font-semibold text-[#1A1A2E]">On-Chain Follow Network</p>
                     </div>
                     <div className="space-y-2.5">
                       {["Alice.sol", "Bob.sol", "Charlie.sol"].map((name, j) => (
@@ -304,14 +304,14 @@ export default function Landing() {
                           </div>
                           <div className="flex-1">
                             <p className="text-xs font-semibold text-[#1A1A2E]">{name}</p>
-                            <p className="text-[10px] text-[#94A3B8]">Can view your private posts</p>
+                            <p className="text-[10px] text-[#94A3B8]">{j === 0 ? "Follows you · Mutual" : j === 1 ? "Following" : "Follows you"}</p>
                           </div>
-                          <div className="w-2 h-2 rounded-full bg-[#16A34A]" />
+                          <div className={`w-2 h-2 rounded-full ${j === 0 ? "bg-[#16A34A]" : "bg-[#2563EB]"}`} />
                         </div>
                       ))}
                     </div>
                     <div className="mt-3 text-center">
-                      <p className="text-[10px] text-[#64748B]">Friend list stored as a PDA on Solana — you control who&apos;s in</p>
+                      <p className="text-[10px] text-[#64748B]">Follow relationships stored on Solana — your social graph, your data</p>
                     </div>
                   </div>
                 </div>

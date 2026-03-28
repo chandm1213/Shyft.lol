@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Share2, Lock, Globe, Send, Shield, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Heart, MessageCircle, Share2, Globe, Send, Shield, RefreshCw } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
 import { useProgram } from "@/hooks/useProgram";
@@ -38,7 +38,6 @@ function OnChainPostCard({
   profile,
   isMe,
   program,
-  variant,
   allComments,
   allReactions,
   profileMap,
@@ -50,7 +49,6 @@ function OnChainPostCard({
   profile: any;
   isMe: boolean;
   program: ShyftClient | null;
-  variant: "public" | "private";
   allComments: { publicKey: string; post: string; author: string; commentIndex: string; content: string; createdAt: string }[];
   allReactions: { publicKey: string; post: string; user: string; reactionType: number; createdAt: string }[];
   profileMap: Record<string, any>;
@@ -186,8 +184,6 @@ function OnChainPostCard({
     setReacting(false);
   };
 
-  const isPublic = variant === "public";
-
   return (
     <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 sm:p-5 mb-3 sm:mb-4 animate-fade-in hover:shadow-md transition-shadow duration-300">
       {/* Author */}
@@ -195,11 +191,9 @@ function OnChainPostCard({
         <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-lg sm:text-xl border-2 border-white shadow-sm flex-shrink-0 ${
           isMe
             ? "bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE]"
-            : isPublic
-              ? "bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7]"
-              : "bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7]"
+            : "bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7]"
         }`}>
-          {isMe ? "🔒" : isPublic ? "👤" : "👥"}
+          {isMe ? "😎" : "👤"}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -210,15 +204,9 @@ function OnChainPostCard({
             <span className="text-xs text-[#94A3B8]">
               {post.createdAt !== "0" ? timeAgo(Number(post.createdAt) * 1000) : "recently"}
             </span>
-            {isPublic ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#2563EB] bg-[#EFF6FF] px-2 py-0.5 rounded-full">
-                <Globe className="w-2.5 h-2.5" /> On-Chain
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#16A34A] bg-[#F0FDF4] px-2 py-0.5 rounded-full">
-                <Lock className="w-2.5 h-2.5" /> Friends Only
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#2563EB] bg-[#EFF6FF] px-2 py-0.5 rounded-full">
+              <Globe className="w-2.5 h-2.5" /> On-Chain
+            </span>
             {post.isDelegated && (
               <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#7C3AED] bg-[#F5F3FF] px-2 py-0.5 rounded-full">
                 <Shield className="w-2.5 h-2.5" /> TEE
@@ -226,11 +214,6 @@ function OnChainPostCard({
             )}
           </div>
         </div>
-        {!isPublic && (
-          <div className="w-8 h-8 rounded-lg bg-[#F0FDF4] flex items-center justify-center flex-shrink-0">
-            <Shield className="w-4 h-4 text-[#16A34A]" />
-          </div>
-        )}
       </div>
 
       {/* Content */}
@@ -334,7 +317,7 @@ function OnChainPostCard({
           href={`https://explorer.solana.com/address/${post.publicKey}?cluster=devnet`}
           target="_blank"
           rel="noopener noreferrer"
-          className={`ml-auto text-[10px] hover:underline ${isPublic ? "text-[#2563EB]" : "text-[#16A34A]"}`}
+          className={`ml-auto text-[10px] hover:underline text-[#2563EB]`}
         >
           View on Explorer
         </a>
@@ -407,40 +390,25 @@ function OnChainPostCard({
 }
 
 export default function Feed() {
-  const { isConnected, friendsOnlyDefault } = useAppStore();
+  const { isConnected } = useAppStore();
   const [newPost, setNewPost] = useState("");
-  const [isPrivate, setIsPrivate] = useState(friendsOnlyDefault);
   const program = useProgram();
   const { publicKey } = useWallet();
   const sessionState = useSessionKey();
   const [onchainPosts, setOnchainPosts] = useState<any[]>([]);
-  const [privatePostsFromFriends, setPrivatePostsFromFriends] = useState<any[]>([]);
   const [loadingOnchain, setLoadingOnchain] = useState(false);
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
-  const [friendList, setFriendList] = useState<PublicKey[]>([]);
   const [allComments, setAllComments] = useState<any[]>([]);
   const [allReactions, setAllReactions] = useState<any[]>([]);
 
   const [posting, setPosting] = useState(false);
 
-  // Sync default privacy when user changes it in Profile settings
-  useEffect(() => {
-    setIsPrivate(friendsOnlyDefault);
-  }, [friendsOnlyDefault]);
-
-  // Fetch all public posts from Solana + private posts from friends
+  // Fetch all public posts from Solana
   const fetchOnchainPosts = async () => {
     if (!program || !publicKey) return;
     setLoadingOnchain(true);
-    clearRpcCache(); // Always fetch fresh data
+    clearRpcCache();
     try {
-      // Get user's friend list
-      const userFriendList = await program.getFriendList(publicKey);
-      const friends: PublicKey[] = userFriendList?.friends || [];
-      console.log("🔍 Friends list:", friends.map(f => f.toBase58()));
-      setFriendList(friends);
-
-      // Fetch ALL posts (including delegated to TEE) and profiles in one go
       const [allMapped, profiles, comments, reactions] = await Promise.all([
         program.getAllPostsIncludingDelegated(),
         program.getAllProfiles(),
@@ -451,47 +419,12 @@ export default function Feed() {
       setAllComments(comments);
       setAllReactions(reactions);
 
-      // Split into public and private
+      // All posts are public now
       const publicPosts = allMapped.filter((p: any) => !p.isPrivate);
-      const allPrivatePosts = allMapped.filter((p: any) => p.isPrivate);
       
-      console.log("📊 All posts:", allMapped.length, "Public:", publicPosts.length, "Private:", allPrivatePosts.length);
+      console.log("📊 All posts:", allMapped.length, "Public:", publicPosts.length);
 
-      // Collect private posts visible to this user
-      const myAddress = publicKey.toBase58();
-      const privatePosts: any[] = [];
-      
-      // 1. Always include your own private posts
-      const myPrivate = allPrivatePosts.filter((p: any) => p.author === myAddress);
-      console.log("🔒 Your private posts:", myPrivate.length);
-      privatePosts.push(...myPrivate);
-      
-      // 2. Check mutual friendship — batch all at once with Promise.all
-      const mutualResults = await Promise.all(
-        friends.map(async (friend) => {
-          try {
-            const friendFL = await program.getFriendList(friend);
-            const friendFriends = friendFL?.friends || [];
-            const isMutual = friendFriends.some((f: PublicKey) => f.equals(publicKey));
-            return { friend, isMutual };
-          } catch {
-            return { friend, isMutual: false };
-          }
-        })
-      );
-
-      for (const { friend, isMutual } of mutualResults) {
-        if (isMutual) {
-          const friendAddr = friend.toBase58();
-          const friendPrivate = allPrivatePosts.filter((p: any) => p.author === friendAddr);
-          console.log(`✓ Mutual friend ${friendAddr.slice(0, 8)}... — ${friendPrivate.length} private posts`);
-          privatePosts.push(...friendPrivate);
-        }
-      }
-
-      console.log("🎯 Total private posts to display:", privatePosts.length);
       setOnchainPosts(publicPosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
-      setPrivatePostsFromFriends(privatePosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
       
       const map: Record<string, any> = {};
       profiles.forEach((p: any) => { map[p.owner] = p; });
@@ -541,27 +474,22 @@ export default function Feed() {
 
     const postId = Date.now();
     const content = newPost;
-    const privacy = isPrivate;
 
     setPosting(true);
     setNewPost("");
 
-    toast("privacy", "Posting...", privacy ? "Creating private post with MagicBlock TEE" : "Publishing to your feed");
+    toast("privacy", "Posting...", "Publishing to your feed");
 
-    // On-chain call
     try {
-      // Double-check wallet is still connected before sending transaction
       if (!publicKey || program.provider.wallet.publicKey?.toBase58() !== publicKey.toBase58()) {
         throw new Error("Wallet disconnected during post creation");
       }
 
-      // Check if profile exists first
       const profile = await program.getProfile(publicKey);
       if (!profile) {
         throw new Error("You need to create a profile first. Go to the Profile tab to set up your account.");
       }
 
-      // Build session opts (shared by both public and private paths)
       let session: SessionOpts | undefined;
       if (sessionState.isActive && sessionState.sessionKeypair && sessionState.sessionTokenPda) {
         session = {
@@ -570,7 +498,6 @@ export default function Feed() {
           authority: publicKey,
         };
       } else {
-        // Try to auto-create session (1 wallet popup)
         const result = await sessionState.createSession();
         if (result) {
           session = {
@@ -581,24 +508,16 @@ export default function Feed() {
         }
       }
 
-      if (privacy) {
-        const result = await program.createPrivatePost(postId, content, friendList, session);
-        toast("success", "Private post created + encrypted 🔐", `TX: ${result.sig.slice(0, 8)}...`);
-      } else {
-        const sig = await program.createPost(postId, content, false, session);
-        toast("success", session ? "Post confirmed (no wallet popup!) 🔑" : "Post confirmed on Solana", `TX: ${sig.slice(0, 8)}...`);
-      }
+      const sig = await program.createPost(postId, content, false, session);
+      toast("success", session ? "Post confirmed (no wallet popup!) 🔑" : "Post confirmed on Solana", `TX: ${sig.slice(0, 8)}...`);
 
-      // Refresh on-chain posts so the real post shows up immediately
       setTimeout(() => fetchOnchainPosts(), 1500);
     } catch (err: any) {
       console.error("On-chain post error:", err);
       const errorMsg = err?.message?.slice(0, 150) || "Unknown error";
 
-      // Restore content so user doesn't lose it
       setNewPost(content);
       
-      // Provide helpful error messages
       if (errorMsg.includes("User rejected") || errorMsg.includes("rejected the request")) {
         toast("error", "Post cancelled", "You rejected the transaction");
       } else if (errorMsg.includes("need to create a profile")) {
@@ -631,17 +550,10 @@ export default function Feed() {
           />
           {newPost.length > 200 && <div className="text-right text-[10px] text-[#94A3B8] -mt-1">{280 - newPost.length} characters left</div>}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F1F5F9] gap-3">
-            <button
-              onClick={() => setIsPrivate(!isPrivate)}
-              className={`touch-active flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${
-                isPrivate
-                  ? "bg-[#F0FDF4] text-[#16A34A]"
-                  : "bg-[#EFF6FF] text-[#2563EB]"
-              }`}
-            >
-              {isPrivate ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              {isPrivate ? "Friends Only" : "Public"}
-            </button>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#EFF6FF] text-[#2563EB]">
+              <Globe className="w-3.5 h-3.5" />
+              Public
+            </div>
             <button
               onClick={handlePost}
               disabled={!newPost.trim() || posting}
@@ -724,7 +636,6 @@ export default function Feed() {
                 profile={profile}
                 isMe={isMe}
                 program={program}
-                variant="public"
                 allComments={allComments}
                 allReactions={allReactions}
                 profileMap={profileMap}
@@ -734,50 +645,6 @@ export default function Feed() {
               />
             );
           })}
-        </div>
-      )}
-
-      {/* Friends-only private posts */}
-      {isConnected && (
-        <div className="mt-2">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-[#16A34A]" />
-              <span className="text-xs font-semibold text-[#64748B]">Friends Only — Private Posts</span>
-            </div>
-            <span className="text-xs text-[#94A3B8]">{privatePostsFromFriends.length} posts</span>
-          </div>
-
-          {privatePostsFromFriends.length === 0 ? (
-            <div className="bg-[#F0FDF4] rounded-xl p-6 text-center border border-[#DCF2E8]">
-              <p className="text-sm text-[#16A34A]">
-                {friendList.length === 0
-                  ? "Add friends to see their private posts here"
-                  : "No private posts from friends yet"}
-              </p>
-            </div>
-          ) : (
-            privatePostsFromFriends.map((post) => {
-              const profile = profileMap[post.author];
-              const isMe = publicKey ? post.author === publicKey.toBase58() : false;
-              return (
-                <OnChainPostCard
-                  key={post.publicKey}
-                  post={post}
-                  profile={profile}
-                  isMe={isMe}
-                  program={program}
-                  variant="private"
-                  allComments={allComments}
-                  allReactions={allReactions}
-                  profileMap={profileMap}
-                  onCommentAdded={refreshInteractions}
-                  onReactionAdded={refreshInteractions}
-                  sessionState={sessionState}
-                />
-              );
-            })
-          )}
         </div>
       )}
     </div>
