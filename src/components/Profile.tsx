@@ -97,6 +97,8 @@ export default function Profile() {
   const [allReactions, setAllReactions] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"posts" | "likes">("posts");
   const [copied, setCopied] = useState(false);
+  const [realFollowerCount, setRealFollowerCount] = useState(0);
+  const [realFollowingCount, setRealFollowingCount] = useState(0);
 
   /* profile creation form */
   const [showSetup, setShowSetup] = useState(false);
@@ -132,7 +134,18 @@ export default function Profile() {
     try {
       const p = await program.getProfile(publicKey);
       setOnChainProfile(p);
+      // Fetch real follower/following counts from FollowAccount PDAs (source of truth)
+      const [followers, following] = await Promise.all([
+        program.getFollowers(publicKey),
+        program.getFollowing(publicKey),
+      ]);
+      setRealFollowerCount(followers.length);
+      setRealFollowingCount(following.length);
+
       if (p) {
+        // Validate createdAt — must be after 2020 (1577836800) to be real
+        const rawTs = Number(p.createdAt);
+        const validTs = rawTs > 1577836800 ? rawTs * 1000 : Date.now();
         setCurrentUser({
           publicKey: publicKey.toBase58(),
           username: p.username,
@@ -140,9 +153,9 @@ export default function Profile() {
           avatar: p.avatarUrl || "",
           bio: p.bio,
           isPrivate: p.isPrivate,
-          followerCount: Number(p.followerCount || 0),
-          followingCount: Number(p.followingCount || 0),
-          createdAt: Number(p.createdAt) * 1000,
+          followerCount: followers.length,
+          followingCount: following.length,
+          createdAt: validTs,
           avatarUrl: p.avatarUrl || "",
           bannerUrl: p.bannerUrl || "",
         });
@@ -269,13 +282,14 @@ export default function Profile() {
     setSaving(false);
   }
 
-  /* derived */
-  const followerCount = Number(onChainProfile?.followerCount || currentUser?.followerCount || 0);
-  const followingCount = Number(onChainProfile?.followingCount || currentUser?.followingCount || 0);
+  /* derived — use real PDA-based counts, not on-chain counters (which may be corrupt for migrated profiles) */
+  const followerCount = realFollowerCount;
+  const followingCount = realFollowingCount;
   const postCount = myPosts.length;
-  const joinDate = onChainProfile?.createdAt
-    ? formatDate(Number(onChainProfile.createdAt) * 1000)
-    : currentUser?.createdAt
+  const rawCreatedAt = Number(onChainProfile?.createdAt || 0);
+  const joinDate = rawCreatedAt > 1577836800
+    ? formatDate(rawCreatedAt * 1000)
+    : currentUser?.createdAt && currentUser.createdAt > 1577836800000
     ? formatDate(currentUser.createdAt)
     : formatDate(Date.now());
   const profileName = onChainProfile?.displayName || currentUser?.displayName || "Anonymous";
