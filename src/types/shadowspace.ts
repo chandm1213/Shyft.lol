@@ -666,6 +666,14 @@ export type Shadowspace = {
           "signer": true
         },
         {
+          "name": "payer",
+          "docs": [
+            "Fee payer — can be a server keypair for gasless UX"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
@@ -1275,6 +1283,14 @@ export type Shadowspace = {
         },
         {
           "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Fee payer — can be a server keypair for gasless UX"
+          ],
           "writable": true,
           "signer": true
         },
@@ -2421,10 +2437,6 @@ export type Shadowspace = {
           {
             "name": "following",
             "type": "pubkey"
-          },
-          {
-            "name": "createdAt",
-            "type": "i64"
           }
         ]
       }
@@ -2504,11 +2516,11 @@ export type Shadowspace = {
           },
           {
             "name": "likes",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "commentCount",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "createdAt",
@@ -2544,19 +2556,19 @@ export type Shadowspace = {
           },
           {
             "name": "postCount",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "followerCount",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "followingCount",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "activeConversationCount",
-            "type": "u64"
+            "type": "u16"
           },
           {
             "name": "createdAt",
@@ -2589,10 +2601,6 @@ export type Shadowspace = {
           {
             "name": "reactionType",
             "type": "u8"
-          },
-          {
-            "name": "createdAt",
-            "type": "i64"
           }
         ]
       }

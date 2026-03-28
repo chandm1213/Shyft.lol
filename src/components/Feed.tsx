@@ -51,7 +51,7 @@ function OnChainPostCard({
   isMe: boolean;
   program: ShyftClient | null;
   allComments: { publicKey: string; post: string; author: string; commentIndex: string; content: string; createdAt: string }[];
-  allReactions: { publicKey: string; post: string; user: string; reactionType: number; createdAt: string }[];
+  allReactions: { publicKey: string; post: string; user: string; reactionType: number }[];
   profileMap: Record<string, any>;
   onCommentAdded: () => void;
   onReactionAdded: () => void;
@@ -370,12 +370,12 @@ function OnChainPostCard({
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleComment()}
-                  maxLength={140}
+                  maxLength={100}
                   placeholder={commenting ? "Posting on-chain..." : "Write a comment..."}
                   disabled={commenting}
                   className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] disabled:opacity-50"
                 />
-                {commentText.length > 100 && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#94A3B8]">{140 - commentText.length}</span>}
+                {commentText.length > 80 && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#94A3B8]">{100 - commentText.length}</span>}
               </div>
               <button
                 onClick={handleComment}
@@ -576,7 +576,7 @@ export default function Feed() {
               <textarea
                 value={newPost}
                 onChange={(e) => setNewPost(e.target.value)}
-                maxLength={500}
+                maxLength={200}
                 placeholder="What's happening?"
                 className="w-full resize-none bg-transparent text-[15px] focus:outline-none placeholder:text-[#94A3B8] min-h-[60px] sm:min-h-[80px] leading-relaxed"
               />
@@ -594,12 +594,12 @@ export default function Feed() {
               )}
             </div>
           </div>
-          {newPost.length > 400 && (
+          {newPost.length > 160 && (
             <div className="flex justify-end mt-1">
               <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-bold ${
-                newPost.length > 480 ? "border-red-400 text-red-500" : "border-[#E2E8F0] text-[#94A3B8]"
+                newPost.length > 180 ? "border-red-400 text-red-500" : "border-[#E2E8F0] text-[#94A3B8]"
               }`}>
-                {500 - newPost.length}
+                {200 - newPost.length}
               </div>
             </div>
           )}

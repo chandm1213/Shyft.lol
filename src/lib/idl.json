@@ -660,6 +660,14 @@
           "signer": true
         },
         {
+          "name": "payer",
+          "docs": [
+            "Fee payer — can be a server keypair for gasless UX"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
@@ -1269,6 +1277,14 @@
         },
         {
           "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Fee payer — can be a server keypair for gasless UX"
+          ],
           "writable": true,
           "signer": true
         },
@@ -2415,10 +2431,6 @@
           {
             "name": "following",
             "type": "pubkey"
-          },
-          {
-            "name": "created_at",
-            "type": "i64"
           }
         ]
       }
@@ -2498,11 +2510,11 @@
           },
           {
             "name": "likes",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "comment_count",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "created_at",
@@ -2538,19 +2550,19 @@
           },
           {
             "name": "post_count",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "follower_count",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "following_count",
-            "type": "u64"
+            "type": "u32"
           },
           {
             "name": "active_conversation_count",
-            "type": "u64"
+            "type": "u16"
           },
           {
             "name": "created_at",
@@ -2583,10 +2595,6 @@
           {
             "name": "reaction_type",
             "type": "u8"
-          },
-          {
-            "name": "created_at",
-            "type": "i64"
           }
         ]
       }

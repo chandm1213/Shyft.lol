@@ -374,7 +374,7 @@ export default function Profile() {
                     value={username}
                     onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
                     placeholder="username"
-                    maxLength={15}
+                    maxLength={16}
                     className="w-full pl-8 pr-3 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm text-[#1A1A2E] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 transition-all"
                   />
                 </div>
@@ -387,7 +387,7 @@ export default function Profile() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Your name"
-                  maxLength={30}
+                  maxLength={24}
                   className="w-full px-3 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm text-[#1A1A2E] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 transition-all"
                 />
               </div>
@@ -399,11 +399,11 @@ export default function Profile() {
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   placeholder="Tell the world about yourself"
-                  maxLength={160}
-                  rows={3}
+                  maxLength={64}
+                  rows={2}
                   className="w-full px-3 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm text-[#1A1A2E] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 transition-all resize-none"
                 />
-                <p className="text-[11px] text-[#94A3B8] mt-1 text-right">{bio.length}/160</p>
+                <p className="text-[11px] text-[#94A3B8] mt-1 text-right">{bio.length}/64</p>
               </div>
 
               <div className="flex gap-2 pt-1">
@@ -704,10 +704,10 @@ export default function Profile() {
                 <input
                   value={editDisplayName}
                   onChange={(e) => setEditDisplayName(e.target.value)}
-                  maxLength={64}
+                  maxLength={24}
                   className="w-full px-3 pt-6 pb-2 bg-transparent border border-[#E2E8F0] rounded-lg text-[15px] text-[#1A1A2E] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 transition-all"
                 />
-                <span className="absolute right-3 top-2 text-[11px] text-[#94A3B8]">{editDisplayName.length}/64</span>
+                <span className="absolute right-3 top-2 text-[11px] text-[#94A3B8]">{editDisplayName.length}/24</span>
               </div>
 
               {/* Bio */}
@@ -716,11 +716,11 @@ export default function Profile() {
                 <textarea
                   value={editBio}
                   onChange={(e) => setEditBio(e.target.value)}
-                  maxLength={160}
-                  rows={3}
+                  maxLength={64}
+                  rows={2}
                   className="w-full px-3 pt-6 pb-2 bg-transparent border border-[#E2E8F0] rounded-lg text-[15px] text-[#1A1A2E] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 transition-all resize-none"
                 />
-                <span className="absolute right-3 top-2 text-[11px] text-[#94A3B8]">{editBio.length}/160</span>
+                <span className="absolute right-3 top-2 text-[11px] text-[#94A3B8]">{editBio.length}/64</span>
               </div>
             </div>
           </div>

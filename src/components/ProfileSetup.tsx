@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Shield, User, AtSign, FileText, Loader2 } from "lucide-react";
 import { useProgram } from "@/hooks/useProgram";
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
-import { useWallet } from "@/hooks/usePrivyWallet";
+import { useWallet, useConnection } from "@/hooks/usePrivyWallet";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 interface ProfileSetupProps {
   onComplete: () => void;
@@ -14,11 +15,41 @@ interface ProfileSetupProps {
 export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
   const program = useProgram();
   const { publicKey } = useWallet();
+  const { connection } = useConnection();
   const { setCurrentUser } = useAppStore();
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fundingWallet, setFundingWallet] = useState(false);
+
+  // Auto-airdrop devnet SOL to new wallets with 0 balance
+  useEffect(() => {
+    if (!publicKey || !connection) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const balance = await connection.getBalance(publicKey);
+        if (balance < 0.01 * LAMPORTS_PER_SOL && !cancelled) {
+          setFundingWallet(true);
+          console.log("💰 New wallet detected with low balance, requesting devnet airdrop...");
+          try {
+            const sig = await connection.requestAirdrop(publicKey, 1 * LAMPORTS_PER_SOL);
+            await connection.confirmTransaction(sig, "confirmed");
+            console.log("✅ Airdropped 1 SOL to", publicKey.toBase58());
+            toast("success", "Wallet funded!", "1 SOL airdropped for devnet transactions");
+          } catch (airdropErr: any) {
+            console.warn("Airdrop failed (may have been rate-limited):", airdropErr?.message);
+            toast("error", "Could not fund wallet", "Please use a Solana faucet to get devnet SOL");
+          }
+          if (!cancelled) setFundingWallet(false);
+        }
+      } catch (e) {
+        console.warn("Balance check failed:", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [publicKey, connection]);
 
   const handleCreate = async () => {
     if (!program || !publicKey || !username.trim() || !displayName.trim()) return;
@@ -91,7 +122,7 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
               value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
               placeholder="satoshi"
-              maxLength={20}
+              maxLength={16}
               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
             />
           </div>
@@ -105,7 +136,7 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Satoshi Nakamoto"
-              maxLength={32}
+              maxLength={24}
               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
             />
           </div>
@@ -118,7 +149,7 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               placeholder="Privacy advocate, builder, dreamer..."
-              maxLength={120}
+              maxLength={64}
               rows={2}
               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] resize-none"
             />
@@ -126,10 +157,15 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
 
           <button
             onClick={handleCreate}
-            disabled={!username.trim() || !displayName.trim() || loading}
+            disabled={!username.trim() || !displayName.trim() || loading || fundingWallet}
             className="w-full py-3 bg-gradient-to-r from-[#2563EB] to-[#16A34A] text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
           >
-            {loading ? (
+            {fundingWallet ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Funding wallet...
+              </>
+            ) : loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Creating on Solana...

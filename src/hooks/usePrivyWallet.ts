@@ -48,9 +48,14 @@ export function useWallet() {
   const signTransaction = useMemo(() => {
     if (!solanaWallet) return undefined;
     return async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
-      const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+      let serialized: Uint8Array;
+      if (tx instanceof Transaction) {
+        serialized = new Uint8Array(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
+      } else {
+        serialized = new Uint8Array(tx.serialize());
+      }
       const result = await solanaWallet.signTransaction!({
-        transaction: new Uint8Array(serialized),
+        transaction: serialized,
       });
       // Deserialize back
       if (tx instanceof Transaction) {

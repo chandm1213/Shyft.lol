@@ -208,7 +208,7 @@ export class ShyftClient {
     // Try to migrate first if existing profile is undersized
     try {
       const acctInfo = await this.provider.connection.getAccountInfo(profilePda);
-      if (acctInfo && acctInfo.data.length < 8 + 437) {
+      if (acctInfo && acctInfo.data.length < 8 + 307) {
         // Account exists but is too small for new schema — migrate it
         console.log("🔄 Existing profile needs migration, resizing...");
         await this.migrateProfile();
@@ -224,6 +224,7 @@ export class ShyftClient {
       .accounts({
         profile: profilePda,
         user,
+        payer: user,
         systemProgram: SystemProgram.programId,
       })
       .rpc();
@@ -741,7 +742,7 @@ export class ShyftClient {
     return sig;
   }
 
-  async getAllReactions(): Promise<{ publicKey: string; post: string; user: string; reactionType: number; createdAt: string }[]> {
+  async getAllReactions(): Promise<{ publicKey: string; post: string; user: string; reactionType: number }[]> {
     const cacheKey = "allReactions";
     const cached = rpcCache.get<any[]>(cacheKey);
     if (cached) return cached;
@@ -753,7 +754,6 @@ export class ShyftClient {
         post: r.account.post.toBase58(),
         user: r.account.user.toBase58(),
         reactionType: r.account.reactionType,
-        createdAt: r.account.createdAt?.toString() || "0",
       }));
       rpcCache.set(cacheKey, result);
       return result;
@@ -763,7 +763,7 @@ export class ShyftClient {
     }
   }
 
-  async getReactionsForPost(postPublicKey: string): Promise<{ publicKey: string; post: string; user: string; reactionType: number; createdAt: string }[]> {
+  async getReactionsForPost(postPublicKey: string): Promise<{ publicKey: string; post: string; user: string; reactionType: number }[]> {
     const all = await this.getAllReactions();
     return all.filter((r) => r.post === postPublicKey);
   }
@@ -1155,6 +1155,7 @@ export class ShyftClient {
         followerProfile: followerProfilePda,
         followingProfile: followingProfilePda,
         user,
+        payer: user,
         systemProgram: SystemProgram.programId,
       })
       .rpc();
@@ -1194,7 +1195,7 @@ export class ShyftClient {
   }
 
   /** Get all follow accounts (for building follower/following lists) */
-  async getAllFollows(): Promise<{ follower: string; following: string; createdAt: string }[]> {
+  async getAllFollows(): Promise<{ follower: string; following: string }[]> {
     const cacheKey = "allFollows";
     const cached = rpcCache.get<any[]>(cacheKey);
     if (cached) return cached;
@@ -1204,7 +1205,6 @@ export class ShyftClient {
       const result = all.map((f: any) => ({
         follower: f.account.follower.toBase58(),
         following: f.account.following.toBase58(),
-        createdAt: f.account.createdAt?.toString() || "0",
       }));
       rpcCache.set(cacheKey, result);
       return result;

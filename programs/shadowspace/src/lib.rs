@@ -72,10 +72,10 @@ pub mod shadowspace {
         avatar_url: String,
         banner_url: String,
     ) -> Result<()> {
-        require!(display_name.len() <= 64, ShadowError::ContentTooLong);
-        require!(bio.len() <= 256, ShadowError::ContentTooLong);
-        require!(avatar_url.len() <= 200, ShadowError::ContentTooLong);
-        require!(banner_url.len() <= 200, ShadowError::ContentTooLong);
+        require!(display_name.len() <= 24, ShadowError::ContentTooLong);
+        require!(bio.len() <= 64, ShadowError::ContentTooLong);
+        require!(avatar_url.len() <= 64, ShadowError::ContentTooLong);
+        require!(banner_url.len() <= 64, ShadowError::ContentTooLong);
         let profile = &mut ctx.accounts.profile;
         profile.display_name = display_name;
         profile.bio = bio;
@@ -178,7 +178,7 @@ pub mod shadowspace {
         content: String,
         is_private: bool,
     ) -> Result<()> {
-        require!(content.len() <= 500, ShadowError::ContentTooLong);
+        require!(content.len() <= 200, ShadowError::ContentTooLong);
         let post = &mut ctx.accounts.post;
         post.author = ctx.accounts.profile.owner;
         post.post_id = post_id;
@@ -214,7 +214,7 @@ pub mod shadowspace {
         comment_index: u64,
         content: String,
     ) -> Result<()> {
-        require!(content.len() <= 140, ShadowError::ContentTooLong);
+        require!(content.len() <= 100, ShadowError::ContentTooLong);
         let comment = &mut ctx.accounts.comment;
         comment.post = ctx.accounts.post.key();
         comment.author = ctx.accounts.commenter_profile.owner;
@@ -240,7 +240,6 @@ pub mod shadowspace {
         reaction.post = ctx.accounts.post.key();
         reaction.user = ctx.accounts.reactor_profile.owner;
         reaction.reaction_type = reaction_type;
-        reaction.created_at = Clock::get()?.unix_timestamp;
         msg!("Reaction {} on post {}", reaction_type, _post_id);
         Ok(())
     }
@@ -369,7 +368,6 @@ pub mod shadowspace {
         let follow = &mut ctx.accounts.follow_account;
         follow.follower = ctx.accounts.follower_profile.owner;
         follow.following = ctx.accounts.following_profile.owner;
-        follow.created_at = Clock::get()?.unix_timestamp;
 
         let follower_profile = &mut ctx.accounts.follower_profile;
         follower_profile.following_count += 1;
@@ -445,10 +443,13 @@ pub mod shadowspace {
 
 #[derive(Accounts)]
 pub struct CreateProfile<'info> {
-    #[account(init_if_needed, payer = user, space = 8 + Profile::LEN, seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
+    #[account(init_if_needed, payer = payer, space = 8 + Profile::LEN, seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
     pub profile: Account<'info, Profile>,
     #[account(mut)]
     pub user: Signer<'info>,
+    /// Fee payer — can be a server keypair for gasless UX
+    #[account(mut)]
+    pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -697,7 +698,7 @@ pub struct CloseConversation<'info> {
 pub struct FollowUser<'info> {
     #[account(
         init,
-        payer = user,
+        payer = payer,
         space = 8 + FollowAccount::LEN,
         seeds = [FOLLOW_SEED, follower_profile.owner.as_ref(), following_profile.owner.as_ref()],
         bump
@@ -709,6 +710,9 @@ pub struct FollowUser<'info> {
     pub following_profile: Account<'info, Profile>,
     #[account(mut)]
     pub user: Signer<'info>,
+    /// Fee payer — can be a server keypair for gasless UX
+    #[account(mut)]
+    pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -774,18 +778,20 @@ pub struct Profile {
     pub display_name: String,
     pub bio: String,
     pub is_private: bool,
-    pub post_count: u64,
-    pub follower_count: u64,
-    pub following_count: u64,
-    pub active_conversation_count: u64,
+    pub post_count: u32,
+    pub follower_count: u32,
+    pub following_count: u32,
+    pub active_conversation_count: u16,
     pub created_at: i64,
     pub avatar_url: String,
     pub banner_url: String,
 }
 
 impl Profile {
-    // 32 + (4+32) + (4+64) + (4+256) + 1 + 8 + 8 + 8 + 8 + 8 + (4+200) + (4+200)
-    pub const LEN: usize = 32 + 4 + 32 + 4 + 64 + 4 + 256 + 1 + 8 + 8 + 8 + 8 + 8 + 4 + 200 + 4 + 200;
+    // 32(owner) + (4+16)(username) + (4+24)(display) + (4+64)(bio) + 1(private)
+    // + 4(posts) + 4(followers) + 4(following) + 2(convos) + 8(created)
+    // + (4+64)(avatar) + (4+64)(banner)
+    pub const LEN: usize = 32 + 4 + 16 + 4 + 24 + 4 + 64 + 1 + 4 + 4 + 4 + 2 + 8 + 4 + 64 + 4 + 64;
 }
 
 #[account]
@@ -794,14 +800,14 @@ pub struct Post {
     pub post_id: u64,
     pub content: String,
     pub is_private: bool,
-    pub likes: u64,
-    pub comment_count: u64,
+    pub likes: u32,
+    pub comment_count: u32,
     pub created_at: i64,
 }
 
 impl Post {
-    // 32(author) + 8(post_id) + 4(str_prefix) + 500(content) + 1(private) + 8(likes) + 8(comments) + 8(timestamp)
-    pub const LEN: usize = 32 + 8 + 4 + 500 + 1 + 8 + 8 + 8;
+    // 32(author) + 8(post_id) + 4(str_prefix) + 200(content) + 1(private) + 4(likes) + 4(comments) + 8(timestamp)
+    pub const LEN: usize = 32 + 8 + 4 + 200 + 1 + 4 + 4 + 8;
 }
 
 #[account]
@@ -814,8 +820,8 @@ pub struct Comment {
 }
 
 impl Comment {
-    // 32(post) + 32(author) + 8(index) + 4(str_prefix) + 140(content) + 8(timestamp)
-    pub const LEN: usize = 32 + 32 + 8 + 4 + 140 + 8;
+    // 32(post) + 32(author) + 8(index) + 4(str_prefix) + 100(content) + 8(timestamp)
+    pub const LEN: usize = 32 + 32 + 8 + 4 + 100 + 8;
 }
 
 #[account]
@@ -823,11 +829,10 @@ pub struct Reaction {
     pub post: Pubkey,
     pub user: Pubkey,
     pub reaction_type: u8,
-    pub created_at: i64,
 }
 
 impl Reaction {
-    pub const LEN: usize = 32 + 32 + 1 + 8;
+    pub const LEN: usize = 32 + 32 + 1;
 }
 
 #[account]
@@ -894,12 +899,11 @@ impl Conversation {
 pub struct FollowAccount {
     pub follower: Pubkey,
     pub following: Pubkey,
-    pub created_at: i64,
 }
 
 impl FollowAccount {
-    // 32(follower) + 32(following) + 8(timestamp)
-    pub const LEN: usize = 32 + 32 + 8;
+    // 32(follower) + 32(following)
+    pub const LEN: usize = 32 + 32;
 }
 
 // ========== ENUMS & ERRORS ==========

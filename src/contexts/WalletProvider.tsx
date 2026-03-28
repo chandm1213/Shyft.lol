@@ -18,8 +18,8 @@ const solanaRpcs = {
     blockExplorerUrl: "https://explorer.solana.com/?cluster=devnet",
   },
   "solana:mainnet": {
-    rpc: createSolanaRpc("https://api.mainnet-beta.solana.com"),
-    rpcSubscriptions: createSolanaRpcSubscriptions("wss://api.mainnet-beta.solana.com"),
+    rpc: createSolanaRpc("https://mainnet.helius-rpc.com/?api-key=2cf03460-f790-4350-a211-18086a3a3fd2"),
+    rpcSubscriptions: createSolanaRpcSubscriptions("wss://mainnet.helius-rpc.com/?api-key=2cf03460-f790-4350-a211-18086a3a3fd2"),
     blockExplorerUrl: "https://explorer.solana.com",
   },
 } as const;
