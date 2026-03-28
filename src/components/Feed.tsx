@@ -573,15 +573,13 @@ export default function Feed() {
       {isConnected && (
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 sm:p-5">
           <div className="flex gap-3">
-            {currentUser?.avatarUrl ? (
-              <img src={currentUser.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
-            ) : currentUser?.displayName ? (
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] flex items-center justify-center text-lg font-bold text-[#2563EB] flex-shrink-0">
-                {currentUser.displayName.charAt(0).toUpperCase()}
-              </div>
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] animate-pulse flex-shrink-0" />
-            )}
+            {(() => {
+              const myAvatar = (publicKey && profileMap[publicKey.toBase58()]?.avatarUrl) || currentUser?.avatarUrl;
+              const myName = (publicKey && profileMap[publicKey.toBase58()]?.displayName) || currentUser?.displayName;
+              if (myAvatar) return <img src={myAvatar} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />;
+              if (myName) return <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] flex items-center justify-center text-lg font-bold text-[#2563EB] flex-shrink-0">{myName.charAt(0).toUpperCase()}</div>;
+              return <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] animate-pulse flex-shrink-0" />;
+            })()}
             <div className="flex-1 min-w-0">
               <textarea
                 value={newPost}
