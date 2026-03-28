@@ -342,8 +342,8 @@ function OnChainPostCard({
             const isMyComment = comment.author === myAddr;
             return (
               <div key={comment.publicKey} className="flex gap-2 animate-fade-in">
-                {(isMyComment ? currentUser?.avatarUrl : commenterProfile?.avatarUrl) ? (
-                  <img src={(isMyComment ? currentUser?.avatarUrl : commenterProfile?.avatarUrl) || ""} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                {commenterProfile?.avatarUrl ? (
+                  <img src={commenterProfile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
                 ) : (
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
                     isMyComment ? "bg-[#EFF6FF] text-[#2563EB]" : "bg-[#F1F5F9] text-[#64748B]"
@@ -575,10 +575,12 @@ export default function Feed() {
           <div className="flex gap-3">
             {currentUser?.avatarUrl ? (
               <img src={currentUser.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
-            ) : (
+            ) : currentUser?.displayName ? (
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] flex items-center justify-center text-lg font-bold text-[#2563EB] flex-shrink-0">
-                {currentUser?.displayName?.charAt(0)?.toUpperCase() || "?"}
+                {currentUser.displayName.charAt(0).toUpperCase()}
               </div>
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] animate-pulse flex-shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <textarea
