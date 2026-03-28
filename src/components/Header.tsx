@@ -50,12 +50,14 @@ export default function Header() {
             publicKey: publicKey.toBase58(),
             username: profile.username,
             displayName: profile.displayName,
-            avatar: "🔒",
+            avatar: profile.avatarUrl || "🔒",
             bio: profile.bio || "",
             isPrivate: profile.isPrivate || false,
             followerCount: Number(profile.followerCount?.toString() || 0),
             followingCount: Number(profile.followingCount?.toString() || 0),
             createdAt: Number(profile.createdAt?.toString() || Date.now()),
+            avatarUrl: profile.avatarUrl || "",
+            bannerUrl: profile.bannerUrl || "",
           });
         } else {
           // No profile — show setup

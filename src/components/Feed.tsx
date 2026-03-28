@@ -342,11 +342,15 @@ function OnChainPostCard({
             const isMyComment = comment.author === myAddr;
             return (
               <div key={comment.publicKey} className="flex gap-2 animate-fade-in">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
-                  isMyComment ? "bg-[#EFF6FF]" : "bg-[#F1F5F9]"
-                }`}>
-                  {isMyComment ? "🔒" : "💬"}
-                </div>
+                {(isMyComment ? useAppStore.getState().currentUser?.avatarUrl : commenterProfile?.avatarUrl) ? (
+                  <img src={(isMyComment ? useAppStore.getState().currentUser?.avatarUrl : commenterProfile?.avatarUrl) || ""} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
+                    isMyComment ? "bg-[#EFF6FF] text-[#2563EB]" : "bg-[#F1F5F9] text-[#64748B]"
+                  }`}>
+                    {commenterName.charAt(0)?.toUpperCase() || "?"}
+                  </div>
+                )}
                 <div className="flex-1 bg-[#F8FAFC] rounded-xl px-3 py-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-[#1A1A2E]">{isMyComment ? "You" : commenterName}</span>
@@ -569,9 +573,13 @@ export default function Feed() {
       {isConnected && (
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 sm:p-5">
           <div className="flex gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] flex items-center justify-center text-lg font-bold text-[#2563EB] flex-shrink-0">
-              {useAppStore.getState().currentUser?.displayName?.charAt(0)?.toUpperCase() || "?"}
-            </div>
+            {useAppStore.getState().currentUser?.avatarUrl ? (
+              <img src={useAppStore.getState().currentUser?.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] flex items-center justify-center text-lg font-bold text-[#2563EB] flex-shrink-0">
+                {useAppStore.getState().currentUser?.displayName?.charAt(0)?.toUpperCase() || "?"}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <textarea
                 value={newPost}

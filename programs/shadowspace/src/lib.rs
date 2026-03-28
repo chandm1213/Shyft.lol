@@ -388,6 +388,69 @@ pub mod shadowspace {
         Ok(())
     }
 
+    // ========== CLOSE ACCOUNTS (reclaim rent) ==========
+
+    /// Close a profile account and return rent to the owner
+    pub fn close_profile(ctx: Context<CloseProfile>) -> Result<()> {
+        msg!("Profile closed for {}", ctx.accounts.profile.owner);
+        Ok(())
+    }
+
+    /// Close a post account and return rent to the author
+    pub fn close_post(ctx: Context<ClosePost>, _post_id: u64) -> Result<()> {
+        let profile = &mut ctx.accounts.profile;
+        profile.post_count = profile.post_count.saturating_sub(1);
+        msg!("Post closed");
+        Ok(())
+    }
+
+    /// Close a comment account and return rent
+    pub fn close_comment(ctx: Context<CloseComment>, _post_id: u64, _comment_index: u64) -> Result<()> {
+        let post = &mut ctx.accounts.post;
+        post.comment_count = post.comment_count.saturating_sub(1);
+        msg!("Comment closed");
+        Ok(())
+    }
+
+    /// Close a reaction account and return rent
+    pub fn close_reaction(_ctx: Context<CloseReaction>, _post_id: u64) -> Result<()> {
+        msg!("Reaction closed");
+        Ok(())
+    }
+
+    /// Close a legacy chat account and return rent
+    pub fn close_chat(_ctx: Context<CloseChat>, _chat_id: u64) -> Result<()> {
+        msg!("Chat closed");
+        Ok(())
+    }
+
+    /// Close a legacy message account and return rent
+    pub fn close_message(_ctx: Context<CloseMessage>, _chat_id: u64, _message_index: u64) -> Result<()> {
+        msg!("Message closed");
+        Ok(())
+    }
+
+    // ========== ADMIN: FORCE CLOSE ANY ACCOUNT ==========
+
+    /// Admin force-close: lets the upgrade authority close ANY program account
+    /// and send rent to the authority. Used for devnet cleanup.
+    pub fn admin_force_close(ctx: Context<AdminForceClose>) -> Result<()> {
+        let target = &ctx.accounts.target_account;
+        let authority = &ctx.accounts.authority;
+        
+        // Transfer all lamports from target to authority
+        let lamports = target.lamports();
+        **target.try_borrow_mut_lamports()? = 0;
+        **authority.try_borrow_mut_lamports()? = authority.lamports().checked_add(lamports).unwrap();
+        
+        // Zero out the data and assign to system program to fully close
+        target.try_borrow_mut_data()?.fill(0);
+        target.assign(&anchor_lang::solana_program::system_program::ID);
+        
+        msg!("Admin force-closed account: {} ({} lamports reclaimed)", target.key(), lamports);
+        Ok(())
+    }
+
     // ========== DELEGATION & PERMISSIONS ==========
 
     pub fn delegate_pda(ctx: Context<DelegatePda>, account_type: AccountType) -> Result<()> {
@@ -731,6 +794,82 @@ pub struct UnfollowUser<'info> {
     pub following_profile: Account<'info, Profile>,
     #[account(mut)]
     pub user: Signer<'info>,
+}
+
+// ========== CLOSE ACCOUNT CONTEXTS ==========
+
+#[derive(Accounts)]
+pub struct CloseProfile<'info> {
+    #[account(mut, close = user, seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
+    pub profile: Account<'info, Profile>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(post_id: u64)]
+pub struct ClosePost<'info> {
+    #[account(mut, close = user, seeds = [POST_SEED, user.key().as_ref(), &post_id.to_le_bytes()], bump)]
+    pub post: Account<'info, Post>,
+    #[account(mut, seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
+    pub profile: Account<'info, Profile>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(post_id: u64, comment_index: u64)]
+pub struct CloseComment<'info> {
+    #[account(mut, close = user, seeds = [COMMENT_SEED, post.key().as_ref(), &comment_index.to_le_bytes()], bump)]
+    pub comment: Account<'info, Comment>,
+    #[account(mut, seeds = [POST_SEED, post.author.as_ref(), &post_id.to_le_bytes()], bump)]
+    pub post: Account<'info, Post>,
+    #[account(mut, constraint = user.key() == comment.author @ ShadowError::Unauthorized)]
+    pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(post_id: u64)]
+pub struct CloseReaction<'info> {
+    #[account(mut, close = user, seeds = [REACTION_SEED, post.key().as_ref(), user.key().as_ref()], bump)]
+    pub reaction: Account<'info, Reaction>,
+    #[account(seeds = [POST_SEED, post.author.as_ref(), &post_id.to_le_bytes()], bump)]
+    pub post: Account<'info, Post>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(chat_id: u64)]
+pub struct CloseChat<'info> {
+    #[account(mut, close = user, seeds = [CHAT_SEED, &chat_id.to_le_bytes()], bump)]
+    pub chat: Account<'info, Chat>,
+    #[account(mut, constraint = user.key() == chat.user1 @ ShadowError::Unauthorized)]
+    pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(chat_id: u64, message_index: u64)]
+pub struct CloseMessage<'info> {
+    #[account(mut, close = user, seeds = [MESSAGE_SEED, &chat_id.to_le_bytes(), &message_index.to_le_bytes()], bump)]
+    pub message: Account<'info, Message>,
+    #[account(mut, constraint = user.key() == message.sender @ ShadowError::Unauthorized)]
+    pub user: Signer<'info>,
+}
+
+// ========== ADMIN FORCE CLOSE ==========
+
+/// Only this wallet (the upgrade authority) can call admin_force_close
+const ADMIN_AUTHORITY: Pubkey = pubkey!("8wf9jJrsUPtCrWwzXxXMkEQSWX2A4sSNAVRSNjuty4j");
+
+#[derive(Accounts)]
+pub struct AdminForceClose<'info> {
+    /// CHECK: Any program-owned account to close. We verify it's owned by our program.
+    #[account(mut, constraint = target_account.owner == &crate::ID @ ShadowError::Unauthorized)]
+    pub target_account: AccountInfo<'info>,
+    /// The upgrade authority — hardcoded, only this wallet can force-close
+    #[account(mut, constraint = authority.key() == ADMIN_AUTHORITY @ ShadowError::Unauthorized)]
+    pub authority: Signer<'info>,
 }
 
 // ========== DELEGATION CONTEXTS ==========

@@ -8,6 +8,38 @@
   },
   "instructions": [
     {
+      "name": "admin_force_close",
+      "docs": [
+        "Admin force-close: lets the upgrade authority close ANY program account",
+        "and send rent to the authority. Used for devnet cleanup."
+      ],
+      "discriminator": [
+        244,
+        156,
+        26,
+        31,
+        96,
+        180,
+        100,
+        158
+      ],
+      "accounts": [
+        {
+          "name": "target_account",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "The upgrade authority — hardcoded, only this wallet can force-close"
+          ],
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "append_message",
       "docs": [
         "Append a message — runs inside ER, FREE"
@@ -36,6 +68,143 @@
         {
           "name": "body",
           "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "close_chat",
+      "docs": [
+        "Close a legacy chat account and return rent"
+      ],
+      "discriminator": [
+        182,
+        227,
+        125,
+        158,
+        213,
+        132,
+        147,
+        192
+      ],
+      "accounts": [
+        {
+          "name": "chat",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  104,
+                  97,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "chat_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_chat_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "close_comment",
+      "docs": [
+        "Close a comment account and return rent"
+      ],
+      "discriminator": [
+        220,
+        161,
+        167,
+        122,
+        254,
+        149,
+        11,
+        78
+      ],
+      "accounts": [
+        {
+          "name": "comment",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  109,
+                  109,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "post"
+              },
+              {
+                "kind": "arg",
+                "path": "comment_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "post",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "post.author",
+                "account": "Post"
+              },
+              {
+                "kind": "arg",
+                "path": "post_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_post_id",
+          "type": "u64"
+        },
+        {
+          "name": "_comment_index",
+          "type": "u64"
         }
       ]
     },
@@ -155,6 +324,276 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "close_message",
+      "docs": [
+        "Close a legacy message account and return rent"
+      ],
+      "discriminator": [
+        53,
+        48,
+        100,
+        249,
+        207,
+        188,
+        96,
+        22
+      ],
+      "accounts": [
+        {
+          "name": "message",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  115,
+                  115,
+                  97,
+                  103,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "chat_id"
+              },
+              {
+                "kind": "arg",
+                "path": "message_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_chat_id",
+          "type": "u64"
+        },
+        {
+          "name": "_message_index",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "close_post",
+      "docs": [
+        "Close a post account and return rent to the author"
+      ],
+      "discriminator": [
+        131,
+        190,
+        34,
+        94,
+        190,
+        71,
+        183,
+        81
+      ],
+      "accounts": [
+        {
+          "name": "post",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              },
+              {
+                "kind": "arg",
+                "path": "post_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_post_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "close_profile",
+      "docs": [
+        "Close a profile account and return rent to the owner"
+      ],
+      "discriminator": [
+        167,
+        36,
+        181,
+        8,
+        136,
+        158,
+        46,
+        207
+      ],
+      "accounts": [
+        {
+          "name": "profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "close_reaction",
+      "docs": [
+        "Close a reaction account and return rent"
+      ],
+      "discriminator": [
+        92,
+        52,
+        140,
+        129,
+        113,
+        132,
+        43,
+        244
+      ],
+      "accounts": [
+        {
+          "name": "reaction",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  97,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "post"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "post",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "post.author",
+                "account": "Post"
+              },
+              {
+                "kind": "arg",
+                "path": "post_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_post_id",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "create_chat",
