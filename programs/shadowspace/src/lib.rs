@@ -48,6 +48,8 @@ pub mod shadowspace {
         profile.follower_count = 0;
         profile.following_count = 0;
         profile.active_conversation_count = 0;
+        profile.avatar_url = String::new();
+        profile.banner_url = String::new();
         profile.created_at = Clock::get()?.unix_timestamp;
         msg!("Profile created for {}", profile.owner);
         Ok(())
@@ -60,6 +62,26 @@ pub mod shadowspace {
         // If follower_count / following_count were uninitialised (old schema),
         // they'll deserialise as 0 after realloc, which is correct.
         msg!("Profile migrated for {}, new size {}", profile.owner, 8 + Profile::LEN);
+        Ok(())
+    }
+
+    pub fn update_profile(
+        ctx: Context<UpdateProfile>,
+        display_name: String,
+        bio: String,
+        avatar_url: String,
+        banner_url: String,
+    ) -> Result<()> {
+        require!(display_name.len() <= 64, ShadowError::ContentTooLong);
+        require!(bio.len() <= 256, ShadowError::ContentTooLong);
+        require!(avatar_url.len() <= 200, ShadowError::ContentTooLong);
+        require!(banner_url.len() <= 200, ShadowError::ContentTooLong);
+        let profile = &mut ctx.accounts.profile;
+        profile.display_name = display_name;
+        profile.bio = bio;
+        profile.avatar_url = avatar_url;
+        profile.banner_url = banner_url;
+        msg!("Profile updated for {}", profile.owner);
         Ok(())
     }
 
@@ -447,6 +469,22 @@ pub struct MigrateProfile<'info> {
 }
 
 #[derive(Accounts)]
+pub struct UpdateProfile<'info> {
+    #[account(
+        mut,
+        realloc = 8 + Profile::LEN,
+        realloc::payer = user,
+        realloc::zero = false,
+        seeds = [PROFILE_SEED, user.key().as_ref()],
+        bump,
+    )]
+    pub profile: Account<'info, Profile>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct UpdateProfilePrivacy<'info> {
     #[account(mut, seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
     pub profile: Account<'info, Profile>,
@@ -741,11 +779,13 @@ pub struct Profile {
     pub following_count: u64,
     pub active_conversation_count: u64,
     pub created_at: i64,
+    pub avatar_url: String,
+    pub banner_url: String,
 }
 
 impl Profile {
-    // 32 + (4+32) + (4+64) + (4+256) + 1 + 8 + 8 + 8 + 8 + 8
-    pub const LEN: usize = 32 + 4 + 32 + 4 + 64 + 4 + 256 + 1 + 8 + 8 + 8 + 8 + 8;
+    // 32 + (4+32) + (4+64) + (4+256) + 1 + 8 + 8 + 8 + 8 + 8 + (4+200) + (4+200)
+    pub const LEN: usize = 32 + 4 + 32 + 4 + 64 + 4 + 256 + 1 + 8 + 8 + 8 + 8 + 8 + 4 + 200 + 4 + 200;
 }
 
 #[account]

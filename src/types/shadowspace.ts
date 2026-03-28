@@ -1926,6 +1926,72 @@ export type Shadowspace = {
       "args": []
     },
     {
+      "name": "updateProfile",
+      "discriminator": [
+        98,
+        67,
+        99,
+        206,
+        86,
+        115,
+        175,
+        1
+      ],
+      "accounts": [
+        {
+          "name": "profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "displayName",
+          "type": "string"
+        },
+        {
+          "name": "bio",
+          "type": "string"
+        },
+        {
+          "name": "avatarUrl",
+          "type": "string"
+        },
+        {
+          "name": "bannerUrl",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "updateProfilePrivacy",
       "discriminator": [
         1,
@@ -2495,6 +2561,14 @@ export type Shadowspace = {
           {
             "name": "createdAt",
             "type": "i64"
+          },
+          {
+            "name": "avatarUrl",
+            "type": "string"
+          },
+          {
+            "name": "bannerUrl",
+            "type": "string"
           }
         ]
       }

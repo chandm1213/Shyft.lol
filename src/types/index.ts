@@ -8,6 +8,8 @@ export interface UserProfile {
   followerCount: number;
   followingCount: number;
   createdAt: number;
+  avatarUrl?: string;
+  bannerUrl?: string;
 }
 
 export interface Post {

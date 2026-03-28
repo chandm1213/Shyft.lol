@@ -243,26 +243,32 @@ function LinkPreview({ url }: { url: string }) {
   );
 }
 
-/* ═══ Image Upload (via imgbb free API) ═══ */
-const IMGBB_API_KEY = ""; // Free tier — no key needed for anonymous uploads
+/* ═══ Image Upload — uploads to /api/upload (imgbb) ═══ */
 
 export async function uploadImage(file: File): Promise<string> {
-  // Use imgBB free API for image hosting
+  // Validate
+  const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+  if (!validTypes.includes(file.type)) {
+    throw new Error("Invalid file type. Use JPG, PNG, GIF, or WebP");
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error("File too large. Max 10MB");
+  }
+
   const formData = new FormData();
   formData.append("image", file);
 
-  // Use a lightweight approach: convert to base64 data URL for now
-  // This works great for small-medium images and doesn't require external APIs
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      // For on-chain storage, we need a URL. Since we can't store base64 on-chain,
-      // we'll use a free image host. For now, return data URL for preview.
-      resolve(reader.result as string);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    body: formData,
   });
+
+  const data = await res.json();
+  if (!res.ok || !data.url) {
+    throw new Error(data.error || "Upload failed");
+  }
+
+  return data.url;
 }
 
 /* ═══ Helper: shorten URL for display ═══ */
@@ -279,29 +285,30 @@ function formatUrlDisplay(url: string): string {
 /* ═══ Compose Media Bar ═══ */
 export function MediaBar({
   onImageSelected,
+  onUploading,
   disabled,
 }: {
-  onImageSelected: (url: string) => void;
+  onImageSelected: (url: string, file?: File) => void;
+  onUploading?: (uploading: boolean) => void;
   disabled?: boolean;
 }) {
   const handleFileSelect = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = "image/jpeg,image/png,image/gif,image/webp";
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       
-      // Validate size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        alert("Image must be under 5MB");
+      if (file.size > 10 * 1024 * 1024) {
+        alert("Image must be under 10MB");
         return;
       }
 
-      // Convert to data URL for preview, user should paste hosted image URL in post
+      // Show local preview immediately
       const reader = new FileReader();
       reader.onloadend = () => {
-        onImageSelected(reader.result as string);
+        onImageSelected(reader.result as string, file);
       };
       reader.readAsDataURL(file);
     };
@@ -309,12 +316,12 @@ export function MediaBar({
   };
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-0.5">
       <button
         onClick={handleFileSelect}
         disabled={disabled}
         className="p-2 rounded-full hover:bg-[#EBF4FF] text-[#2563EB] transition-colors disabled:opacity-40"
-        title="Add image"
+        title="Add photo"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 19.5V4.5a2.25 2.25 0 0 0-2.25-2.25H3.75A2.25 2.25 0 0 0 1.5 4.5v15a2.25 2.25 0 0 0 2.25 2.25Z" />
@@ -324,18 +331,11 @@ export function MediaBar({
         disabled={disabled}
         className="p-2 rounded-full hover:bg-[#EBF4FF] text-[#2563EB] transition-colors disabled:opacity-40"
         title="Add GIF"
+        onClick={handleFileSelect}
       >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12.75 8.25v7.5m6-7.5h-3V12m0 0h3m-3 0h-3m-2.25 0a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-        </svg>
-      </button>
-      <button
-        disabled={disabled}
-        className="p-2 rounded-full hover:bg-[#EBF4FF] text-[#2563EB] transition-colors disabled:opacity-40"
-        title="Add emoji"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" />
+        <svg className="w-5 h-5 font-bold" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+          <rect x="2" y="4" width="20" height="16" rx="3" />
+          <text x="12" y="14.5" textAnchor="middle" fill="currentColor" stroke="none" fontSize="8" fontWeight="bold">GIF</text>
         </svg>
       </button>
     </div>

@@ -290,6 +290,23 @@ export class ShyftClient {
     return sig;
   }
 
+  async updateProfile(displayName: string, bio: string, avatarUrl: string, bannerUrl: string): Promise<string> {
+    const user = this.provider.wallet.publicKey;
+    const [profilePda] = getProfilePda(user);
+
+    const sig = await this.program.methods
+      .updateProfile(displayName, bio, avatarUrl, bannerUrl)
+      .accounts({
+        profile: profilePda,
+        user,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+    
+    rpcCache.invalidate("profile_" + user.toBase58());
+    return sig;
+  }
+
   // ========== POSTS ==========
 
   async createPost(postId: number, content: string, isPrivate: boolean, session?: SessionOpts): Promise<string> {

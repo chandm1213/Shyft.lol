@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Heart, MessageCircle, Share2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
-import { RichContent, MediaBar } from "@/components/RichContent";
+import { RichContent, MediaBar, uploadImage } from "@/components/RichContent";
 import { useProgram } from "@/hooks/useProgram";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
@@ -189,13 +189,17 @@ function OnChainPostCard({
     <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 sm:p-5 mb-3 sm:mb-4 animate-fade-in hover:shadow-md transition-shadow duration-300">
       {/* Author */}
       <div className="flex items-center gap-2.5 sm:gap-3 mb-3">
-        <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-lg sm:text-xl border-2 border-white shadow-sm flex-shrink-0 ${
-          isMe
-            ? "bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE]"
-            : "bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7]"
-        }`}>
-          {isMe ? "😎" : "👤"}
-        </div>
+        {profile?.avatarUrl ? (
+          <img src={profile.avatarUrl} alt={displayName} className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
+        ) : (
+          <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-lg sm:text-xl border-2 border-white shadow-sm flex-shrink-0 ${
+            isMe
+              ? "bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE]"
+              : "bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7]"
+          }`}>
+            {displayName.charAt(0)?.toUpperCase() || "?"}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <span className="font-semibold text-[#1A1A2E] text-sm truncate">{displayName}</span>
@@ -406,6 +410,8 @@ export default function Feed() {
 
   const [posting, setPosting] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   // Fetch all public posts from Solana
   const fetchOnchainPosts = async () => {
@@ -470,21 +476,38 @@ export default function Feed() {
   };
 
   const handlePost = async () => {
-    if (!newPost.trim() || posting) return;
+    if ((!newPost.trim() && !imageFile) || posting) return;
     if (!program || !publicKey) {
       toast("error", "Wallet not connected", "Please connect your wallet to post");
       return;
     }
 
     const postId = Date.now();
-    const content = newPost;
+    let content = newPost;
 
     setPosting(true);
     setNewPost("");
 
-    toast("privacy", "Posting...", "Publishing to your feed");
-
     try {
+      // Upload image first if attached
+      if (imageFile) {
+        toast("privacy", "Uploading image...", "Hosting your image");
+        try {
+          const imageUrl = await uploadImage(imageFile);
+          // Append image URL to post content
+          content = content.trim() ? `${content.trim()}\n${imageUrl}` : imageUrl;
+          setImagePreview(null);
+          setImageFile(null);
+        } catch (err: any) {
+          toast("error", "Image upload failed", err.message || "Try again");
+          setPosting(false);
+          setNewPost(content);
+          return;
+        }
+      }
+
+      toast("privacy", "Posting...", "Publishing to your feed");
+
       if (!publicKey || program.provider.wallet.publicKey?.toBase58() !== publicKey.toBase58()) {
         throw new Error("Wallet disconnected during post creation");
       }
@@ -562,7 +585,7 @@ export default function Feed() {
                 <div className="relative mt-2 rounded-2xl overflow-hidden border border-[#E2E8F0] inline-block">
                   <img src={imagePreview} alt="Preview" className="max-h-[200px] max-w-full object-cover rounded-2xl" />
                   <button
-                    onClick={() => { setImagePreview(null); }}
+                    onClick={() => { setImagePreview(null); setImageFile(null); }}
                     className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
                   >
                     <X className="w-4 h-4 text-white" />
@@ -582,15 +605,18 @@ export default function Feed() {
           )}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F1F5F9] gap-3">
             <MediaBar
-              onImageSelected={(url) => {
+              onImageSelected={(url, file) => {
                 setImagePreview(url);
-                toast("privacy", "Image added", "Paste an image URL in your post for on-chain storage");
+                if (file) setImageFile(file);
               }}
-              disabled={posting}
+              disabled={posting || uploading}
             />
+            {uploading && (
+              <span className="text-xs text-[#2563EB] animate-pulse">Uploading...</span>
+            )}
             <button
               onClick={handlePost}
-              disabled={!newPost.trim() || posting}
+              disabled={(!newPost.trim() && !imageFile) || posting}
               className="touch-active px-5 py-2 bg-[#2563EB] text-white text-[15px] font-bold rounded-full hover:bg-[#1D4ED8] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shadow-blue-200"
             >
               {posting ? "Posting..." : "Post"}

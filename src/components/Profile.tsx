@@ -18,6 +18,10 @@ import {
   Copy,
   Check,
   Globe,
+  Camera,
+  Pencil,
+  X,
+  Loader2,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useProgram } from "@/hooks/useProgram";
@@ -25,6 +29,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { toast } from "@/components/Toast";
 import { RichContent } from "@/components/RichContent";
+import { uploadImage } from "@/components/RichContent";
 import { ShyftClient, clearRpcCache } from "@/lib/program";
 
 /* ───────── Types ───────── */
@@ -102,6 +107,15 @@ export default function Profile() {
 
   /* edit mode */
   const [editing, setEditing] = useState(false);
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editAvatarUrl, setEditAvatarUrl] = useState("");
+  const [editBannerUrl, setEditBannerUrl] = useState("");
+  const [editAvatarPreview, setEditAvatarPreview] = useState<string | null>(null);
+  const [editBannerPreview, setEditBannerPreview] = useState<string | null>(null);
+  const [editAvatarFile, setEditAvatarFile] = useState<File | null>(null);
+  const [editBannerFile, setEditBannerFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
 
   /* ── fetch everything ── */
   useEffect(() => {
@@ -123,12 +137,14 @@ export default function Profile() {
           publicKey: publicKey.toBase58(),
           username: p.username,
           displayName: p.displayName,
-          avatar: "",
+          avatar: p.avatarUrl || "",
           bio: p.bio,
           isPrivate: p.isPrivate,
           followerCount: Number(p.followerCount || 0),
           followingCount: Number(p.followingCount || 0),
           createdAt: Number(p.createdAt) * 1000,
+          avatarUrl: p.avatarUrl || "",
+          bannerUrl: p.bannerUrl || "",
         });
       }
       // fetch posts
@@ -176,6 +192,83 @@ export default function Profile() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  /* ── open edit modal ── */
+  function openEditModal() {
+    setEditDisplayName(profileName);
+    setEditBio(profileBio);
+    setEditAvatarUrl(onChainProfile?.avatarUrl || currentUser?.avatarUrl || "");
+    setEditBannerUrl(onChainProfile?.bannerUrl || currentUser?.bannerUrl || "");
+    setEditAvatarPreview(null);
+    setEditBannerPreview(null);
+    setEditAvatarFile(null);
+    setEditBannerFile(null);
+    setEditing(true);
+  }
+
+  /* ── pick image for avatar or banner ── */
+  function pickImage(target: "avatar" | "banner") {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/gif,image/webp";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) {
+        toast("error", "Too large", "Image must be under 10MB");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (target === "avatar") {
+          setEditAvatarPreview(reader.result as string);
+          setEditAvatarFile(file);
+        } else {
+          setEditBannerPreview(reader.result as string);
+          setEditBannerFile(file);
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  }
+
+  /* ── save profile ── */
+  async function handleSaveProfile() {
+    if (!program || saving) return;
+    setSaving(true);
+    try {
+      let avatarUrl = editAvatarUrl;
+      let bannerUrl = editBannerUrl;
+
+      // Upload avatar if changed
+      if (editAvatarFile) {
+        toast("privacy", "Uploading avatar...", "");
+        avatarUrl = await uploadImage(editAvatarFile);
+      }
+      // Upload banner if changed
+      if (editBannerFile) {
+        toast("privacy", "Uploading banner...", "");
+        bannerUrl = await uploadImage(editBannerFile);
+      }
+
+      toast("privacy", "Saving profile...", "Writing to Solana");
+      await program.updateProfile(
+        editDisplayName.trim() || profileName,
+        editBio.trim(),
+        avatarUrl,
+        bannerUrl,
+      );
+      toast("success", "Profile updated!", "Changes saved on-chain");
+      clearRpcCache();
+      setEditing(false);
+      await fetchProfile();
+    } catch (err: any) {
+      console.error("Save profile error:", err);
+      toast("error", "Failed to save", err?.message?.slice(0, 80) || "");
+    }
+    setSaving(false);
+  }
+
   /* derived */
   const followerCount = Number(onChainProfile?.followerCount || currentUser?.followerCount || 0);
   const followingCount = Number(onChainProfile?.followingCount || currentUser?.followingCount || 0);
@@ -188,6 +281,8 @@ export default function Profile() {
   const profileName = onChainProfile?.displayName || currentUser?.displayName || "Anonymous";
   const profileUsername = onChainProfile?.username || currentUser?.username || "";
   const profileBio = onChainProfile?.bio || currentUser?.bio || "";
+  const avatarUrl = onChainProfile?.avatarUrl || currentUser?.avatarUrl || "";
+  const bannerUrl = onChainProfile?.bannerUrl || currentUser?.bannerUrl || "";
 
   /* ════════════ NOT CONNECTED ════════════ */
   if (!isConnected || !publicKey) {
@@ -337,11 +432,16 @@ export default function Profile() {
       </div>
 
       {/* ── Banner ── */}
-      <div className="h-[200px] bg-gradient-to-br from-[#2563EB] via-[#3B82F6] to-[#60A5FA] relative">
-        {/* subtle pattern overlay */}
-        <div className="absolute inset-0 opacity-10" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-        }} />
+      <div className="h-[200px] relative overflow-hidden">
+        {bannerUrl ? (
+          <img src={bannerUrl} alt="Banner" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-[#2563EB] via-[#3B82F6] to-[#60A5FA]">
+            <div className="absolute inset-0 opacity-10" style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            }} />
+          </div>
+        )}
       </div>
 
       {/* ── Profile Info Section ── */}
@@ -349,15 +449,29 @@ export default function Profile() {
         {/* Avatar + Edit button row */}
         <div className="flex justify-between items-start">
           <div className="relative -mt-[42px]">
-            <div className="w-[84px] h-[84px] rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] border-4 border-white flex items-center justify-center text-4xl shadow-lg">
-              {profileName.charAt(0).toUpperCase()}
-            </div>
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={profileName}
+                className="w-[84px] h-[84px] rounded-full border-4 border-white object-cover shadow-lg"
+              />
+            ) : (
+              <div className="w-[84px] h-[84px] rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] border-4 border-white flex items-center justify-center text-4xl shadow-lg font-bold text-[#2563EB]">
+                {profileName.charAt(0).toUpperCase()}
+              </div>
+            )}
             {/* on-chain verified badge */}
             <div className="absolute -bottom-0.5 -right-0.5 w-6 h-6 bg-[#2563EB] rounded-full flex items-center justify-center border-2 border-white">
               <BadgeCheck className="w-3.5 h-3.5 text-white" />
             </div>
           </div>
           <div className="mt-3 flex gap-2">
+            <button
+              onClick={openEditModal}
+              className="px-4 py-1.5 rounded-full border border-[#E2E8F0] text-sm font-bold text-[#1A1A2E] hover:bg-[#F1F5F9] transition-colors"
+            >
+              Edit profile
+            </button>
             <button
               onClick={copyWallet}
               className="w-9 h-9 rounded-full border border-[#E2E8F0] flex items-center justify-center hover:bg-[#F1F5F9] transition-colors"
@@ -469,6 +583,7 @@ export default function Profile() {
                   post={post}
                   profileName={profileName}
                   profileUsername={profileUsername}
+                  avatarUrl={avatarUrl}
                   comments={allComments.filter((c) => c.post === post.publicKey)}
                   reactions={allReactions.filter((r) => r.post === post.publicKey)}
                 />
@@ -489,6 +604,114 @@ export default function Profile() {
 
       {/* ── Bottom border ── */}
       <div className="bg-white border-x border-b border-[#E2E8F0] rounded-b-xl h-4" />
+
+      {/* ═══ Edit Profile Modal ═══ */}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-10 sm:pt-16">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !saving && setEditing(false)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-[600px] mx-4 max-h-[90vh] overflow-y-auto shadow-2xl animate-fade-in">
+            {/* Modal header */}
+            <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm flex items-center justify-between px-4 py-3 border-b border-[#E2E8F0]">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => !saving && setEditing(false)}
+                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-[#F1F5F9] transition-colors"
+                >
+                  <X className="w-5 h-5 text-[#1A1A2E]" />
+                </button>
+                <h2 className="text-lg font-bold text-[#1A1A2E]">Edit profile</h2>
+              </div>
+              <button
+                onClick={handleSaveProfile}
+                disabled={saving}
+                className="px-4 py-1.5 bg-[#1A1A2E] text-white font-bold text-sm rounded-full hover:bg-[#2A2A3E] transition-colors disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+              </button>
+            </div>
+
+            {/* Banner edit */}
+            <div className="h-[200px] relative overflow-hidden group">
+              {editBannerPreview || editBannerUrl ? (
+                <img
+                  src={editBannerPreview || editBannerUrl}
+                  alt="Banner"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-[#2563EB] via-[#3B82F6] to-[#60A5FA]" />
+              )}
+              <div className="absolute inset-0 bg-black/30 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => pickImage("banner")}
+                  className="w-11 h-11 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
+                >
+                  <Camera className="w-5 h-5 text-white" />
+                </button>
+                {(editBannerPreview || editBannerUrl) && (
+                  <button
+                    onClick={() => { setEditBannerPreview(null); setEditBannerFile(null); setEditBannerUrl(""); }}
+                    className="w-11 h-11 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
+                  >
+                    <X className="w-5 h-5 text-white" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Avatar edit */}
+            <div className="px-4 -mt-[42px] mb-4 relative">
+              <div className="relative w-[84px] h-[84px] group">
+                {editAvatarPreview || editAvatarUrl ? (
+                  <img
+                    src={editAvatarPreview || editAvatarUrl}
+                    alt="Avatar"
+                    className="w-[84px] h-[84px] rounded-full border-4 border-white object-cover"
+                  />
+                ) : (
+                  <div className="w-[84px] h-[84px] rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] border-4 border-white flex items-center justify-center text-4xl font-bold text-[#2563EB]">
+                    {editDisplayName.charAt(0)?.toUpperCase() || "?"}
+                  </div>
+                )}
+                <button
+                  onClick={() => pickImage("avatar")}
+                  className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Camera className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            </div>
+
+            {/* Form fields */}
+            <div className="px-4 pb-6 space-y-5">
+              {/* Display Name */}
+              <div className="relative">
+                <label className="absolute left-3 top-2 text-[11px] text-[#64748B]">Name</label>
+                <input
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  maxLength={64}
+                  className="w-full px-3 pt-6 pb-2 bg-transparent border border-[#E2E8F0] rounded-lg text-[15px] text-[#1A1A2E] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 transition-all"
+                />
+                <span className="absolute right-3 top-2 text-[11px] text-[#94A3B8]">{editDisplayName.length}/64</span>
+              </div>
+
+              {/* Bio */}
+              <div className="relative">
+                <label className="absolute left-3 top-2 text-[11px] text-[#64748B]">Bio</label>
+                <textarea
+                  value={editBio}
+                  onChange={(e) => setEditBio(e.target.value)}
+                  maxLength={160}
+                  rows={3}
+                  className="w-full px-3 pt-6 pb-2 bg-transparent border border-[#E2E8F0] rounded-lg text-[15px] text-[#1A1A2E] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 transition-all resize-none"
+                />
+                <span className="absolute right-3 top-2 text-[11px] text-[#94A3B8]">{editBio.length}/160</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -500,12 +723,14 @@ function ProfilePostCard({
   post,
   profileName,
   profileUsername,
+  avatarUrl,
   comments,
   reactions,
 }: {
   post: OnChainPost;
   profileName: string;
   profileUsername: string;
+  avatarUrl?: string;
   comments: any[];
   reactions: any[];
 }) {
@@ -525,9 +750,13 @@ function ProfilePostCard({
     <div className="border-b border-[#E2E8F0] px-4 py-3 hover:bg-[#F8FAFC]/50 transition-colors">
       <div className="flex gap-3">
         {/* Avatar */}
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] flex items-center justify-center text-lg font-bold text-[#2563EB] flex-shrink-0">
-          {profileName.charAt(0).toUpperCase()}
-        </div>
+        {avatarUrl ? (
+          <img src={avatarUrl} alt={profileName} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] flex items-center justify-center text-lg font-bold text-[#2563EB] flex-shrink-0">
+            {profileName.charAt(0).toUpperCase()}
+          </div>
+        )}
 
         <div className="flex-1 min-w-0">
           {/* Author line */}
