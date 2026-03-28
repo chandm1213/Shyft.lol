@@ -24,6 +24,7 @@ import { useProgram } from "@/hooks/useProgram";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { toast } from "@/components/Toast";
+import { RichContent } from "@/components/RichContent";
 import { ShyftClient, clearRpcCache } from "@/lib/program";
 
 /* ───────── Types ───────── */
@@ -539,9 +540,9 @@ function ProfilePostCard({
           </div>
 
           {/* Content */}
-          <p className="mt-1 text-[15px] text-[#1A1A2E] leading-relaxed whitespace-pre-wrap break-words">
-            {post.content}
-          </p>
+          <div className="mt-1">
+            <RichContent content={post.content} />
+          </div>
 
           {/* Reaction chips */}
           {totalReactions > 0 && (

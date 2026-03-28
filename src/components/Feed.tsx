@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Share2, Globe, Send, Shield, RefreshCw } from "lucide-react";
+import { Heart, MessageCircle, Share2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
+import { RichContent, MediaBar } from "@/components/RichContent";
 import { useProgram } from "@/hooks/useProgram";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
@@ -217,7 +218,9 @@ function OnChainPostCard({
       </div>
 
       {/* Content */}
-      <p className="text-[#1A1A2E] text-sm leading-relaxed mb-3 pl-0 sm:pl-14">{post.content}</p>
+      <div className="mb-3 pl-0 sm:pl-14">
+        <RichContent content={post.content} />
+      </div>
 
       {/* Reaction pills (show aggregated reactions) */}
       {postReactions.length > 0 && (
@@ -402,6 +405,7 @@ export default function Feed() {
   const [allReactions, setAllReactions] = useState<any[]>([]);
 
   const [posting, setPosting] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   // Fetch all public posts from Solana
   const fetchOnchainPosts = async () => {
@@ -541,23 +545,53 @@ export default function Feed() {
       {/* Compose */}
       {isConnected && (
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 sm:p-5">
-          <textarea
-            value={newPost}
-            onChange={(e) => setNewPost(e.target.value)}
-            maxLength={280}
-            placeholder="What's on your mind? Your thoughts are encrypted..."
-            className="w-full resize-none bg-transparent text-sm focus:outline-none placeholder:text-[#94A3B8] min-h-[60px] sm:min-h-[80px]"
-          />
-          {newPost.length > 200 && <div className="text-right text-[10px] text-[#94A3B8] -mt-1">{280 - newPost.length} characters left</div>}
-          <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F1F5F9] gap-3">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#EFF6FF] text-[#2563EB]">
-              <Globe className="w-3.5 h-3.5" />
-              Public
+          <div className="flex gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#DBEAFE] flex items-center justify-center text-lg font-bold text-[#2563EB] flex-shrink-0">
+              {useAppStore.getState().currentUser?.displayName?.charAt(0)?.toUpperCase() || "?"}
             </div>
+            <div className="flex-1 min-w-0">
+              <textarea
+                value={newPost}
+                onChange={(e) => setNewPost(e.target.value)}
+                maxLength={500}
+                placeholder="What's happening?"
+                className="w-full resize-none bg-transparent text-[15px] focus:outline-none placeholder:text-[#94A3B8] min-h-[60px] sm:min-h-[80px] leading-relaxed"
+              />
+              {/* Image preview */}
+              {imagePreview && (
+                <div className="relative mt-2 rounded-2xl overflow-hidden border border-[#E2E8F0] inline-block">
+                  <img src={imagePreview} alt="Preview" className="max-h-[200px] max-w-full object-cover rounded-2xl" />
+                  <button
+                    onClick={() => { setImagePreview(null); }}
+                    className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          {newPost.length > 400 && (
+            <div className="flex justify-end mt-1">
+              <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-bold ${
+                newPost.length > 480 ? "border-red-400 text-red-500" : "border-[#E2E8F0] text-[#94A3B8]"
+              }`}>
+                {500 - newPost.length}
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F1F5F9] gap-3">
+            <MediaBar
+              onImageSelected={(url) => {
+                setImagePreview(url);
+                toast("privacy", "Image added", "Paste an image URL in your post for on-chain storage");
+              }}
+              disabled={posting}
+            />
             <button
               onClick={handlePost}
               disabled={!newPost.trim() || posting}
-              className="touch-active px-4 sm:px-5 py-2 bg-[#2563EB] text-white text-sm font-medium rounded-xl hover:bg-[#1D4ED8] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shadow-blue-200"
+              className="touch-active px-5 py-2 bg-[#2563EB] text-white text-[15px] font-bold rounded-full hover:bg-[#1D4ED8] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shadow-blue-200"
             >
               {posting ? "Posting..." : "Post"}
             </button>
