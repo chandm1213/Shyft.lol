@@ -1258,27 +1258,51 @@ export class ShyftClient {
    */
   async findPeerEncryptionKey(chatId: number, myAddress: string): Promise<Uint8Array | null> {
     // Get chat to know how many messages exist
-    const chat = await this.getChat(chatId);
-    if (!chat) return null;
-    const msgCount = Number(chat.messageCount || 0);
+    const [chatPda] = getChatPda(chatId);
+    let msgCount = 0;
+    try {
+      // Use raw connection fetch to bypass any Anchor caching
+      const chatInfo = await this.provider.connection.getAccountInfo(chatPda);
+      if (!chatInfo) {
+        console.log("findPeerEncryptionKey: chat PDA not found");
+        return null;
+      }
+      const coder = new BorshCoder(idl as Idl);
+      const chat = coder.accounts.decode("Chat", chatInfo.data);
+      msgCount = Number(chat.messageCount || 0);
+    } catch (err) {
+      console.warn("findPeerEncryptionKey: failed to decode chat:", err);
+      return null;
+    }
+
+    console.log(`findPeerEncryptionKey: chatId=${chatId}, msgCount=${msgCount}, myAddr=${myAddress.slice(0, 8)}...`);
 
     // Scan first 10 messages (key exchange is always in the first few)
     const limit = Math.min(msgCount, 10);
     for (let i = 0; i < limit; i++) {
       try {
         const [pda] = getMessagePda(chatId, i);
-        const msg = await this.accounts.message.fetch(pda);
+        // Use raw connection fetch to bypass any Anchor caching
+        const accInfo = await this.provider.connection.getAccountInfo(pda);
+        if (!accInfo) continue;
+        const coder = new BorshCoder(idl as Idl);
+        const msg = coder.accounts.decode("Message", accInfo.data);
         const sender = msg.sender?.toBase58() || "";
         const content = (msg.content as string) || "";
+        console.log(`  msg[${i}]: sender=${sender.slice(0, 8)}... content=${content.slice(0, 40)}`);
         if (sender === myAddress) continue;
         if (isPubkeyMessage(content)) {
           const key = parsePubkeyMessage(content);
-          if (key && key.length === 32) return key;
+          if (key && key.length === 32) {
+            console.log(`  ✅ Found peer key at msg[${i}]!`);
+            return key;
+          }
         }
-      } catch {
-        // Message doesn't exist at this index, skip
+      } catch (err) {
+        console.log(`  msg[${i}]: fetch failed (${err})`);
       }
     }
+    console.log("  ❌ No peer key found");
     return null;
   }
 
@@ -1287,15 +1311,26 @@ export class ShyftClient {
    * Does DIRECT PDA lookups (no cache) to ensure fresh data.
    */
   async findMyEncryptionKey(chatId: number, myAddress: string): Promise<boolean> {
-    const chat = await this.getChat(chatId);
-    if (!chat) return false;
-    const msgCount = Number(chat.messageCount || 0);
+    const [chatPda] = getChatPda(chatId);
+    let msgCount = 0;
+    try {
+      const chatInfo = await this.provider.connection.getAccountInfo(chatPda);
+      if (!chatInfo) return false;
+      const coder = new BorshCoder(idl as Idl);
+      const chat = coder.accounts.decode("Chat", chatInfo.data);
+      msgCount = Number(chat.messageCount || 0);
+    } catch {
+      return false;
+    }
 
     const limit = Math.min(msgCount, 10);
     for (let i = 0; i < limit; i++) {
       try {
         const [pda] = getMessagePda(chatId, i);
-        const msg = await this.accounts.message.fetch(pda);
+        const accInfo = await this.provider.connection.getAccountInfo(pda);
+        if (!accInfo) continue;
+        const coder = new BorshCoder(idl as Idl);
+        const msg = coder.accounts.decode("Message", accInfo.data);
         const sender = msg.sender?.toBase58() || "";
         const content = (msg.content as string) || "";
         if (sender === myAddress && isPubkeyMessage(content)) {

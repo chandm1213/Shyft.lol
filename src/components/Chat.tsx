@@ -220,21 +220,25 @@ export default function Chat() {
 
       const myAddr = publicKey.toBase58();
 
-      // Always re-check peer key (uses direct PDA lookups, no cache)
-      const peerKey = await program.findPeerEncryptionKey(chatInfo.chatId, myAddr);
-      setPeerPubKey(peerKey);
-
-      // Also check if WE need to publish our key (second user opening chat)
-      if (peerKey && chatInfo.exists) {
-        const hasMyKey = await program.findMyEncryptionKey(chatInfo.chatId, myAddr);
-        if (!hasMyKey) {
-          console.log("🔑 Publishing our encryption key for this chat...");
-          const chatData = await program.getChat(chatInfo.chatId);
-          const msgIndex = chatData ? Number(chatData.messageCount || 0) : 0;
-          await program.publishEncryptionKey(chatInfo.chatId, msgIndex, encryptionKeys.publicKey);
-          console.log("✅ Encryption key published!");
+      // First: ensure WE have published our key (critical for second user)
+      if (chatInfo.exists) {
+        try {
+          const hasMyKey = await program.findMyEncryptionKey(chatInfo.chatId, myAddr);
+          if (!hasMyKey) {
+            console.log("🔑 Publishing our encryption key for this chat...");
+            const chatData = await program.getChat(chatInfo.chatId);
+            const msgIndex = chatData ? Number(chatData.messageCount || 0) : 0;
+            await program.publishEncryptionKey(chatInfo.chatId, msgIndex, encryptionKeys.publicKey);
+            console.log("✅ Encryption key published on-chain!");
+          }
+        } catch (keyErr) {
+          console.warn("Key publish check failed:", keyErr);
         }
       }
+
+      // Now check for peer's key (uses direct PDA lookups, no cache)
+      const peerKey = await program.findPeerEncryptionKey(chatInfo.chatId, myAddr);
+      setPeerPubKey(peerKey);
 
       if (peerKey) {
         const decrypted = await program.getDecryptedMessages(
