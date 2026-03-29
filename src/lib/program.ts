@@ -1254,15 +1254,29 @@ export class ShyftClient {
 
   /**
    * Find the encryption public key of the OTHER participant in a chat.
-   * Scans messages for PUBKEY: prefixed content from someone other than `myAddress`.
+   * Does DIRECT PDA lookups (no cache) to ensure fresh data.
    */
   async findPeerEncryptionKey(chatId: number, myAddress: string): Promise<Uint8Array | null> {
-    const messages = await this.getMessagesForChat(chatId);
-    for (const msg of messages) {
-      if (msg.sender === myAddress) continue;
-      if (isPubkeyMessage(msg.content)) {
-        const key = parsePubkeyMessage(msg.content);
-        if (key && key.length === 32) return key;
+    // Get chat to know how many messages exist
+    const chat = await this.getChat(chatId);
+    if (!chat) return null;
+    const msgCount = Number(chat.messageCount || 0);
+
+    // Scan first 10 messages (key exchange is always in the first few)
+    const limit = Math.min(msgCount, 10);
+    for (let i = 0; i < limit; i++) {
+      try {
+        const [pda] = getMessagePda(chatId, i);
+        const msg = await this.accounts.message.fetch(pda);
+        const sender = msg.sender?.toBase58() || "";
+        const content = (msg.content as string) || "";
+        if (sender === myAddress) continue;
+        if (isPubkeyMessage(content)) {
+          const key = parsePubkeyMessage(content);
+          if (key && key.length === 32) return key;
+        }
+      } catch {
+        // Message doesn't exist at this index, skip
       }
     }
     return null;
@@ -1270,12 +1284,25 @@ export class ShyftClient {
 
   /**
    * Find MY encryption public key in a chat (to check if already published).
+   * Does DIRECT PDA lookups (no cache) to ensure fresh data.
    */
   async findMyEncryptionKey(chatId: number, myAddress: string): Promise<boolean> {
-    const messages = await this.getMessagesForChat(chatId);
-    for (const msg of messages) {
-      if (msg.sender === myAddress && isPubkeyMessage(msg.content)) {
-        return true;
+    const chat = await this.getChat(chatId);
+    if (!chat) return false;
+    const msgCount = Number(chat.messageCount || 0);
+
+    const limit = Math.min(msgCount, 10);
+    for (let i = 0; i < limit; i++) {
+      try {
+        const [pda] = getMessagePda(chatId, i);
+        const msg = await this.accounts.message.fetch(pda);
+        const sender = msg.sender?.toBase58() || "";
+        const content = (msg.content as string) || "";
+        if (sender === myAddress && isPubkeyMessage(content)) {
+          return true;
+        }
+      } catch {
+        // skip
       }
     }
     return false;
