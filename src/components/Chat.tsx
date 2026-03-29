@@ -1,12 +1,28 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, ArrowLeft, DollarSign, Lock, Shield, Search, RefreshCw, Plus, MessageCircle, Zap } from "lucide-react";
+import {
+  Send,
+  ArrowLeft,
+  DollarSign,
+  Lock,
+  Shield,
+  Search,
+  RefreshCw,
+  Plus,
+  MessageCircle,
+  ShieldCheck,
+  KeyRound,
+  AlertCircle,
+} from "lucide-react";
 import { useProgram } from "@/hooks/useProgram";
 import { usePrivatePayment } from "@/hooks/usePrivatePayment";
 import { toast } from "@/components/Toast";
 import { useWallet } from "@/hooks/usePrivyWallet";
 import { PublicKey } from "@solana/web3.js";
+import { deriveEncryptionKeypair } from "@/lib/encryption";
+import { deriveChatId } from "@/lib/program";
+import nacl from "tweetnacl";
 
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -29,29 +45,45 @@ interface ContactInfo {
 }
 
 interface ChatInfo {
+  chatId: number;
   friendAddress: string;
   friend: ContactInfo;
-  hasConversation: boolean;
+  exists: boolean;
+  messageCount: number;
   lastMessage: string;
   lastMessageTime: number;
 }
 
-interface EphemeralMsg {
+interface DecryptedMsg {
+  publicKey: string;
+  messageIndex: number;
   sender: string;
-  body: string;
-  timestamp: number;
+  content: string;
+  decrypted: string | null;
+  isPayment: boolean;
+  paymentAmount: number;
+  timestamp: string;
+  isKeyExchange: boolean;
+  isEncrypted: boolean;
+  isMe: boolean;
 }
 
 export default function Chat() {
   const program = useProgram();
   const { publicKey, connected } = useWallet();
+  const wallet = useWallet();
   const { sendPayment } = usePrivatePayment();
+
+  // Encryption state
+  const [encryptionKeys, setEncryptionKeys] = useState<nacl.BoxKeyPair | null>(null);
+  const [keysLoading, setKeysLoading] = useState(false);
 
   // State
   const [friends, setFriends] = useState<ContactInfo[]>([]);
   const [chats, setChats] = useState<ChatInfo[]>([]);
   const [activeChat, setActiveChat] = useState<ChatInfo | null>(null);
-  const [messages, setMessages] = useState<EphemeralMsg[]>([]);
+  const [peerPubKey, setPeerPubKey] = useState<Uint8Array | null>(null);
+  const [messages, setMessages] = useState<DecryptedMsg[]>([]);
   const [messageText, setMessageText] = useState("");
   const [showPayment, setShowPayment] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -59,22 +91,38 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
-  const [setting_up, setSettingUp] = useState(false);
-  const [profileDelegated, setProfileDelegated] = useState(false);
+  const [creatingChat, setCreatingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const subIdRef = useRef<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Check if profile is delegated
+  // Derive encryption keys from wallet on mount
   useEffect(() => {
-    if (!program || !publicKey) return;
-    program.isProfileDelegated().then(setProfileDelegated).catch(() => {});
-  }, [program, publicKey]);
+    if (!publicKey || !wallet.wallet || encryptionKeys) return;
 
-  // Load contacts (people you follow / mutual follows)
+    const deriveKeys = async () => {
+      setKeysLoading(true);
+      try {
+        const signMessage = async (message: Uint8Array): Promise<Uint8Array> => {
+          const result = await wallet.wallet!.signMessage({ message });
+          return new Uint8Array(result.signature);
+        };
+        const keys = await deriveEncryptionKeypair(publicKey.toBase58(), signMessage);
+        setEncryptionKeys(keys);
+        console.log("🔑 E2E encryption keys derived");
+      } catch (err: any) {
+        console.error("Failed to derive encryption keys:", err);
+        toast("error", "Encryption key error", "Could not derive encryption keys. Try reconnecting.");
+      }
+      setKeysLoading(false);
+    };
+    deriveKeys();
+  }, [publicKey, wallet.wallet, encryptionKeys]);
+
+  // Load contacts and chat list
   const loadFriendsAndChats = useCallback(async () => {
     if (!program || !publicKey) return;
     setLoading(true);
@@ -88,7 +136,6 @@ export default function Chat() {
       const profileMap: Record<string, any> = {};
       profiles.forEach((p: any) => { profileMap[p.owner] = p; });
 
-      // Build contact list from people you follow
       const contactInfos: ContactInfo[] = followingList.map((addr: string) => {
         const profile = profileMap[addr];
         const isMutual = followersList.includes(addr);
@@ -105,33 +152,50 @@ export default function Chat() {
 
       const chatInfos: ChatInfo[] = [];
       for (const friend of contactInfos) {
-        const hasConv = await program.conversationExists(publicKey, friend.pubkey);
+        const chatId = deriveChatId(publicKey, friend.pubkey);
+        const chatData = await program.getChat(chatId);
+        const exists = chatData !== null;
         let lastMsg = "";
         let lastTime = 0;
-        if (hasConv) {
-          try {
-            const msgs = await program.getConversationMessages(publicKey, friend.pubkey);
-            if (msgs.length > 0) {
-              const last = msgs[msgs.length - 1];
-              lastMsg = last.body.slice(0, 40);
-              lastTime = last.timestamp * 1000;
-            } else {
-              lastMsg = "Conversation ready";
+        let msgCount = 0;
+
+        if (exists) {
+          msgCount = Number(chatData.messageCount || 0);
+          if (msgCount > 0) {
+            try {
+              const msgs = await program.getMessagesForChat(chatId);
+              const visibleMsgs = msgs.filter((m: any) => !m.content.startsWith("PUBKEY:"));
+              if (visibleMsgs.length > 0) {
+                const last = visibleMsgs[visibleMsgs.length - 1];
+                if (last.content.startsWith("ENC:")) {
+                  lastMsg = "🔒 Encrypted message";
+                } else {
+                  lastMsg = last.content.slice(0, 40);
+                }
+                lastTime = Number(last.timestamp || "0") * 1000;
+              } else {
+                lastMsg = "🔑 Key exchange complete";
+              }
+            } catch {
+              lastMsg = "Chat active";
             }
-          } catch { lastMsg = "Conversation active"; }
+          }
         }
+
         chatInfos.push({
+          chatId,
           friendAddress: friend.address,
           friend,
-          hasConversation: hasConv,
-          lastMessage: hasConv ? (lastMsg || "Start chatting...") : "Tap to start ephemeral chat",
+          exists,
+          messageCount: msgCount,
+          lastMessage: exists ? (lastMsg || "Start chatting...") : "Tap to start encrypted chat",
           lastMessageTime: lastTime,
         });
       }
 
       chatInfos.sort((a, b) => {
-        if (a.hasConversation && !b.hasConversation) return -1;
-        if (!a.hasConversation && b.hasConversation) return 1;
+        if (a.exists && !b.exists) return -1;
+        if (!a.exists && b.exists) return 1;
         return b.lastMessageTime - a.lastMessageTime;
       });
       setChats(chatInfos);
@@ -145,244 +209,167 @@ export default function Chat() {
     loadFriendsAndChats();
   }, [loadFriendsAndChats]);
 
-  // Load messages + subscribe to real-time updates
+  // Load messages for active chat
   const loadMessages = useCallback(async (chatInfo: ChatInfo) => {
-    if (!program || !publicKey) return;
+    if (!program || !publicKey || !encryptionKeys) return;
     setLoadingMessages(true);
     try {
-      const msgs = await program.getConversationMessages(publicKey, chatInfo.friend.pubkey);
-      setMessages(msgs);
+      const myAddr = publicKey.toBase58();
+      const peerKey = await program.findPeerEncryptionKey(chatInfo.chatId, myAddr);
+      setPeerPubKey(peerKey);
+
+      if (peerKey) {
+        const decrypted = await program.getDecryptedMessages(
+          chatInfo.chatId,
+          myAddr,
+          encryptionKeys.secretKey,
+          peerKey
+        );
+        setMessages(decrypted);
+      } else {
+        const raw = await program.getMessagesForChat(chatInfo.chatId);
+        setMessages(raw.map((m: any) => ({
+          publicKey: m.publicKey,
+          messageIndex: m.messageIndex,
+          sender: m.sender,
+          content: m.content,
+          decrypted: null,
+          isPayment: m.isPayment,
+          paymentAmount: m.paymentAmount,
+          timestamp: m.timestamp,
+          isKeyExchange: m.content.startsWith("PUBKEY:"),
+          isEncrypted: m.content.startsWith("ENC:"),
+          isMe: m.sender === myAddr,
+        })));
+      }
     } catch (err) {
       console.error("Failed to load messages:", err);
       setMessages([]);
     }
     setLoadingMessages(false);
-  }, [program, publicKey]);
+  }, [program, publicKey, encryptionKeys]);
 
-  // Subscribe to real-time updates when chat opens
+  // Poll for new messages
   useEffect(() => {
-    if (!activeChat || !program || !publicKey || !activeChat.hasConversation) return;
+    if (!activeChat || !activeChat.exists) return;
 
-    // Subscribe to ER account changes for real-time messages
-    const subId = program.onConversationChange(
-      publicKey,
-      activeChat.friend.pubkey,
-      (msgs) => {
-        setMessages(msgs);
-      }
-    );
-    // Also try reverse ordering
-    const subId2 = program.onConversationChange(
-      activeChat.friend.pubkey,
-      publicKey,
-      (msgs) => {
-        setMessages(msgs);
-      }
-    );
-    subIdRef.current = subId;
+    loadMessages(activeChat);
+
+    pollRef.current = setInterval(() => {
+      loadMessages(activeChat);
+    }, 8000);
 
     return () => {
-      if (subId !== null) program.removeConversationListener(subId);
-      if (subId2 !== null) program.removeConversationListener(subId2);
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
     };
-  }, [activeChat, program, publicKey]);
+  }, [activeChat?.chatId, activeChat?.exists, loadMessages]);
 
   const selectChat = async (chat: ChatInfo) => {
     setActiveChat(chat);
     setMessages([]);
-    if (chat.hasConversation) {
+    setPeerPubKey(null);
+    if (chat.exists) {
       loadMessages(chat);
     }
   };
 
-  /** Set up ephemeral chat: delegate profile → create conversations for ALL mutual follows → undelegate.
-   *  This way the user only pays the delegation cost ONCE, not per-contact. */
-  const setupEphemeralChat = async (friend: ContactInfo): Promise<boolean> => {
-    if (!program || !publicKey) return false;
-    setSettingUp(true);
-    try {
-      // Step 1: Top up & delegate profile in a SINGLE transaction (1 wallet prompt)
-      const isDelegated = await program.isProfileDelegated();
-      if (!isDelegated) {
-        toast("privacy", "Setting up ephemeral chat", "Funding & delegating profile to MagicBlock...");
-        await program.topUpAndDelegateProfile(2_000_000); // 0.002 SOL minimum
-        setProfileDelegated(true);
-        console.log("✅ Profile topped up & delegated (single TX)");
-      }
-
-      // Step 2: Wait for the ER to pick up the delegated profile
-      toast("privacy", "Waiting for MagicBlock ER sync", "Confirming delegation...");
-      await program.waitForProfileOnER(8000);
-      console.log("✅ Profile confirmed on ER");
-
-      // Step 3: Create conversations for ALL mutual follows who don't have one yet
-      // This way we only delegate/undelegate ONCE, not per-contact
-      const friendsNeedingConv: ContactInfo[] = [];
-      for (const f of friends) {
-        if (!f.isMutual) continue; // only mutual follows
-        const hasUsable = await program.conversationExists(publicKey, f.pubkey);
-        if (!hasUsable) {
-          // Check for stale conversations to clean up first
-          const stalePda = await program.findStaleConversation(publicKey, f.pubkey);
-          if (stalePda) {
-            console.log(`🗑️ Closing stale conversation with ${f.address.slice(0, 8)}...`);
-            try {
-              await program.closeConversation(f.pubkey);
-              await new Promise(r => setTimeout(r, 2000));
-            } catch (closeErr: any) {
-              console.warn("Close stale conv failed:", closeErr?.message?.slice(0, 80));
-            }
-          }
-          friendsNeedingConv.push(f);
-        }
-      }
-
-      // Make sure the target contact is in the list
-      if (!friendsNeedingConv.some(f => f.pubkey.equals(friend.pubkey))) {
-        const hasUsable = await program.conversationExists(publicKey, friend.pubkey);
-        if (!hasUsable) {
-          friendsNeedingConv.push(friend);
-        }
-      }
-
-      if (friendsNeedingConv.length === 0) {
-        console.log("✅ All conversations already exist — skipping create");
-      } else {
-        const total = friendsNeedingConv.length;
-        console.log(`📨 Creating ${total} conversation(s) in batch...`);
-        for (let i = 0; i < friendsNeedingConv.length; i++) {
-          const f = friendsNeedingConv[i];
-          toast("privacy", `Creating chat ${i + 1}/${total}`, `Setting up chat with ${f.displayName}...`);
-          let created = false;
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-              await program.createConversation(f.pubkey, 10);
-              console.log(`✅ Conversation created with ${f.address.slice(0, 8)}... (${i + 1}/${total})`);
-              created = true;
-              break;
-            } catch (err: any) {
-              console.warn(`createConversation attempt ${attempt}/3 for ${f.address.slice(0, 8)} failed:`, err?.message?.slice(0, 100));
-              if (attempt < 3) {
-                await new Promise(r => setTimeout(r, 3000 * attempt));
-              }
-            }
-          }
-          if (!created) {
-            console.warn(`⚠️ Failed to create conversation with ${f.address.slice(0, 8)} — will retry next time`);
-          }
-        }
-      }
-
-      // Step 4: Undelegate profile so normal operations (posting, etc.) work again
-      toast("privacy", "Finalizing setup", "Undelegating profile...");
-      try {
-        await program.undelegateProfile();
-        setProfileDelegated(false);
-        console.log("✅ Profile undelegated — normal ops restored");
-      } catch (err: any) {
-        console.warn("Undelegate after chat setup failed:", err?.message?.slice(0, 80));
-      }
-
-      // Refresh chat list to show newly created conversations
-      await loadFriendsAndChats();
-
-      toast("success", "Ephemeral chats ready! ⚡", friendsNeedingConv.length > 1
-        ? `Set up ${friendsNeedingConv.length} chats — all free messaging from now on`
-        : "Messages are free, private & real-time");
-      return true;
-    } catch (err: any) {
-      console.error("Setup failed:", err);
-      toast("error", "Ephemeral chat setup failed", err?.message?.slice(0, 80));
-      // Try to undelegate even on failure so user isn't stuck
-      try { await program.undelegateProfile(); setProfileDelegated(false); } catch {}
-      return false;
-    } finally {
-      setSettingUp(false);
-    }
-  };
-
   const handleSend = async () => {
-    if (!messageText.trim() || !activeChat || !program || !publicKey) return;
+    if (!messageText.trim() || !program || !publicKey || !encryptionKeys) return;
     const content = messageText.trim();
     setMessageText("");
     setSending(true);
 
     try {
-      // If no ephemeral conversation exists yet, set one up
-      if (!activeChat.hasConversation) {
-        const ok = await setupEphemeralChat(activeChat.friend);
-        if (!ok) { setSending(false); return; }
-        setActiveChat(prev => prev ? { ...prev, hasConversation: true } : null);
+      let chatInfo = activeChat;
+
+      if (!chatInfo || !chatInfo.exists) {
+        if (!chatInfo) { setSending(false); return; }
+        setCreatingChat(true);
+        toast("privacy", "Creating encrypted chat", "Setting up E2E encryption on-chain...");
+
+        const { chatId, isNew } = await program.getOrCreateE2EChat(
+          chatInfo.friend.pubkey,
+          encryptionKeys.publicKey
+        );
+
+        chatInfo = { ...chatInfo, chatId, exists: true, messageCount: isNew ? 1 : chatInfo.messageCount };
+        setActiveChat(chatInfo);
         setChats(prev => prev.map(c =>
-          c.friendAddress === activeChat.friendAddress ? { ...c, hasConversation: true } : c
+          c.friendAddress === chatInfo!.friendAddress ? chatInfo! : c
         ));
-        // Wait for ER to be ready
-        await new Promise(r => setTimeout(r, 1000));
+        setCreatingChat(false);
+        toast("success", "Chat created! 🔐", "E2E encrypted channel established on-chain");
+
+        const myAddr = publicKey.toBase58();
+        const peerKey = await program.findPeerEncryptionKey(chatInfo.chatId, myAddr);
+        setPeerPubKey(peerKey);
+
+        if (!peerKey) {
+          toast("privacy", "Waiting for peer", "They need to open this chat to complete key exchange.");
+          setSending(false);
+          setMessageText(content);
+          return;
+        }
       }
 
-      // Optimistic update
-      const localMsg: EphemeralMsg = {
+      let peerKey = peerPubKey;
+      if (!peerKey) {
+        const myAddr = publicKey.toBase58();
+        peerKey = await program.findPeerEncryptionKey(chatInfo.chatId, myAddr);
+        setPeerPubKey(peerKey);
+      }
+
+      if (!peerKey) {
+        toast("error", "Key exchange incomplete", "The other person needs to open this chat first.");
+        setSending(false);
+        setMessageText(content);
+        return;
+      }
+
+      const chatData = await program.getChat(chatInfo.chatId);
+      const msgIndex = chatData ? Number(chatData.messageCount || 0) : 0;
+
+      const localMsg: DecryptedMsg = {
+        publicKey: "pending",
+        messageIndex: msgIndex,
         sender: publicKey.toBase58(),
-        body: content,
-        timestamp: Math.floor(Date.now() / 1000),
+        content: "ENC:...",
+        decrypted: content,
+        isPayment: false,
+        paymentAmount: 0,
+        timestamp: Math.floor(Date.now() / 1000).toString(),
+        isKeyExchange: false,
+        isEncrypted: true,
+        isMe: true,
       };
       setMessages(prev => [...prev, localMsg]);
 
-      // Send via ER (FREE!)
-      await program.appendMessage(activeChat.friend.pubkey, content);
+      await program.sendE2EMessage(
+        chatInfo.chatId,
+        msgIndex,
+        content,
+        encryptionKeys.secretKey,
+        peerKey
+      );
 
-      // Update chat list
       setChats(prev => prev.map(c =>
-        c.friendAddress === activeChat.friendAddress
-          ? { ...c, lastMessage: content.slice(0, 40), lastMessageTime: Date.now(), hasConversation: true }
+        c.friendAddress === chatInfo!.friendAddress
+          ? { ...c, lastMessage: "🔒 Encrypted message", lastMessageTime: Date.now(), exists: true, messageCount: msgIndex + 1 }
           : c
       ));
     } catch (err: any) {
       console.error("Send error:", err);
-      const errMsg = err?.message || err?.toString() || "";
-
-      // If the conversation doesn't exist or is too small, try to set up again
-      const isConvMissing = errMsg.includes("AccountNotFound") ||
-        errMsg.includes("could not find") ||
-        errMsg.includes("Account does not exist") ||
-        errMsg.includes("does not exist on ER") ||
-        errMsg.includes("too small");
-
-      if (isConvMissing) {
-        console.log("⚠️ Conversation missing — attempting to recreate...");
-        toast("privacy", "Reconnecting ephemeral chat", "Conversation expired — recreating...");
-        try {
-          setActiveChat(prev => prev ? { ...prev, hasConversation: false } : null);
-          const ok = await setupEphemeralChat(activeChat.friend);
-          if (ok) {
-            setActiveChat(prev => prev ? { ...prev, hasConversation: true } : null);
-            setChats(prev => prev.map(c =>
-              c.friendAddress === activeChat.friendAddress ? { ...c, hasConversation: true } : c
-            ));
-            await new Promise(r => setTimeout(r, 1000));
-            await program.appendMessage(activeChat.friend.pubkey, content);
-            setChats(prev => prev.map(c =>
-              c.friendAddress === activeChat.friendAddress
-                ? { ...c, lastMessage: content.slice(0, 40), lastMessageTime: Date.now(), hasConversation: true }
-                : c
-            ));
-            toast("success", "Message sent! ⚡", "Ephemeral chat reconnected");
-          } else {
-            toast("error", "Failed to send message", "Could not reconnect ephemeral chat");
-          }
-        } catch (retryErr: any) {
-          console.error("Retry after recreate failed:", retryErr);
-          toast("error", "Failed to send message", retryErr?.message?.slice(0, 80));
-        }
-      } else {
-        toast("error", "Failed to send message", errMsg.slice(0, 80));
-      }
+      toast("error", "Failed to send", err?.message?.slice(0, 80) || "Transaction failed");
+      setMessages(prev => prev.filter(m => m.publicKey !== "pending"));
     }
     setSending(false);
   };
 
   const handleSendPayment = async () => {
-    if (!paymentAmount || !activeChat || !program || !publicKey) return;
+    if (!paymentAmount || !activeChat || !program || !publicKey || !encryptionKeys) return;
     const amount = parseFloat(paymentAmount);
     if (isNaN(amount) || amount <= 0) {
       toast("error", "Invalid amount", "Enter a valid SOL amount");
@@ -397,21 +384,27 @@ export default function Chat() {
     try {
       const result = await sendPayment(activeChat.friend.address, amount);
       if (!result) throw new Error("Payment transaction failed");
-      console.log("✅ SOL payment confirmed:", result.transferSig);
 
-      // Record payment as ephemeral message (free)
-      const paymentMsg = `💸 Sent ${amount} SOL`;
-      if (activeChat.hasConversation) {
+      if (activeChat.exists && peerPubKey) {
         try {
-          await program.appendMessage(activeChat.friend.pubkey, paymentMsg);
+          const chatData = await program.getChat(activeChat.chatId);
+          const msgIndex = chatData ? Number(chatData.messageCount || 0) : 0;
+          await program.sendE2EMessage(
+            activeChat.chatId,
+            msgIndex,
+            `💸 Sent ${amount} SOL`,
+            encryptionKeys.secretKey,
+            peerPubKey,
+            true,
+            Math.round(amount * 1_000_000)
+          );
         } catch { /* best effort */ }
       }
 
       toast("success", "Payment sent! 💸", `${amount} SOL → ${activeChat.friend.displayName}`);
-
       setChats(prev => prev.map(c =>
         c.friendAddress === activeChat.friendAddress
-          ? { ...c, lastMessage: paymentMsg, lastMessageTime: Date.now() }
+          ? { ...c, lastMessage: `💸 Sent ${amount} SOL`, lastMessageTime: Date.now() }
           : c
       ));
     } catch (err: any) {
@@ -431,17 +424,47 @@ export default function Chat() {
       <div className="flex items-center justify-center h-[70vh]">
         <div className="text-center">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#EFF6FF] to-[#F0FDF4] flex items-center justify-center mx-auto mb-4">
-            <Zap className="w-8 h-8 text-[#7C3AED]" />
+            <ShieldCheck className="w-8 h-8 text-[#7C3AED]" />
           </div>
-          <h3 className="text-lg font-bold text-[#1A1A2E] mb-2">Ephemeral Messaging</h3>
-          <p className="text-sm text-[#64748B]">Connect your wallet to access free, private, real-time chats</p>
+          <h3 className="text-lg font-bold text-[#1A1A2E] mb-2">E2E Encrypted Chat</h3>
+          <p className="text-sm text-[#64748B]">Connect your wallet to access private, encrypted messaging on Solana</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (keysLoading) {
+    return (
+      <div className="flex items-center justify-center h-[70vh]">
+        <div className="text-center">
+          <KeyRound className="w-10 h-10 text-[#7C3AED] animate-pulse mx-auto mb-3" />
+          <h3 className="text-lg font-bold text-[#1A1A2E] mb-2">Deriving Encryption Keys</h3>
+          <p className="text-sm text-[#64748B]">Sign the message in your wallet to generate your encryption keypair...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!encryptionKeys) {
+    return (
+      <div className="flex items-center justify-center h-[70vh]">
+        <div className="text-center">
+          <AlertCircle className="w-10 h-10 text-[#EF4444] mx-auto mb-3" />
+          <h3 className="text-lg font-bold text-[#1A1A2E] mb-2">Encryption Keys Required</h3>
+          <p className="text-sm text-[#64748B] mb-4">Could not derive encryption keys. Please reconnect your wallet.</p>
+          <button
+            onClick={() => { setEncryptionKeys(null); setKeysLoading(false); }}
+            className="px-4 py-2 bg-[#2563EB] text-white text-sm font-medium rounded-xl hover:bg-[#1D4ED8] transition-all"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-[calc(100vh-120px)] sm:h-[calc(100vh-73px)] md:h-[calc(100vh-73px)] max-w-5xl mx-auto bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden">
+    <div className="chat-container flex h-[calc(100vh-120px)] sm:h-[calc(100vh-73px)] md:h-[calc(100vh-73px)] max-w-5xl mx-auto bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden">
       {/* Conversation List */}
       <div
         className={`w-full md:w-80 border-r border-[#E2E8F0] flex flex-col ${
@@ -451,8 +474,8 @@ export default function Chat() {
         <div className="p-3 sm:p-4 border-b border-[#E2E8F0]">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5">
-              <h2 className="font-bold text-sm text-[#1A1A2E]">Chats</h2>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#7C3AED]/10 text-[#7C3AED] font-medium">⚡ Ephemeral</span>
+              <h2 className="font-bold text-sm text-[#1A1A2E]">Messages</h2>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#7C3AED]/10 text-[#7C3AED] font-medium">🔐 E2E</span>
             </div>
             <button
               onClick={loadFriendsAndChats}
@@ -469,7 +492,7 @@ export default function Chat() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search friends..."
+              placeholder="Search contacts..."
               className="w-full pl-10 pr-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
             />
           </div>
@@ -485,8 +508,8 @@ export default function Chat() {
           {!loading && filteredChats.length === 0 && (
             <div className="p-6 text-center">
               <MessageCircle className="w-10 h-10 text-[#94A3B8] mx-auto mb-3" />
-              <p className="text-sm text-[#94A3B8] mb-1">No chats yet</p>
-              <p className="text-xs text-[#94A3B8]">Follow people in the People tab to start chatting</p>
+              <p className="text-sm text-[#94A3B8] mb-1">No conversations yet</p>
+              <p className="text-xs text-[#94A3B8]">Follow people to start encrypted chats</p>
             </div>
           )}
 
@@ -499,16 +522,16 @@ export default function Chat() {
               }`}
             >
               <div className="relative">
-                {chat.friend.avatar && chat.friend.avatar.startsWith('http') ? (
+                {chat.friend.avatar && chat.friend.avatar.startsWith("http") ? (
                   <img src={chat.friend.avatar} alt={chat.friend.displayName} className="w-12 h-12 rounded-full object-cover" />
                 ) : (
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-xl">
                     {chat.friend.avatar}
                   </div>
                 )}
-                {chat.hasConversation ? (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#7C3AED] border-2 border-white flex items-center justify-center">
-                    <Zap className="w-2 h-2 text-white" />
+                {chat.exists ? (
+                  <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#16A34A] border-2 border-white flex items-center justify-center">
+                    <Lock className="w-2 h-2 text-white" />
                   </div>
                 ) : (
                   <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#94A3B8] border-2 border-white" />
@@ -522,8 +545,8 @@ export default function Chat() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1 mt-0.5">
-                  {chat.hasConversation ? (
-                    <Zap className="w-2.5 h-2.5 text-[#7C3AED] flex-shrink-0" />
+                  {chat.exists ? (
+                    <Lock className="w-2.5 h-2.5 text-[#16A34A] flex-shrink-0" />
                   ) : (
                     <Plus className="w-2.5 h-2.5 text-[#94A3B8] flex-shrink-0" />
                   )}
@@ -542,37 +565,42 @@ export default function Chat() {
             {/* Chat Header */}
             <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 border-b border-[#E2E8F0] bg-white">
               <button
-                onClick={() => { setActiveChat(null); setMessages([]); }}
+                onClick={() => { setActiveChat(null); setMessages([]); setPeerPubKey(null); }}
                 className="md:hidden w-9 h-9 rounded-lg hover:bg-[#F1F5F9] active:bg-[#E2E8F0] flex items-center justify-center flex-shrink-0"
               >
                 <ArrowLeft className="w-5 h-5 text-[#64748B]" />
               </button>
-              {activeChat.friend.avatar && activeChat.friend.avatar.startsWith('http') ? (
+              {activeChat.friend.avatar && activeChat.friend.avatar.startsWith("http") ? (
                 <img src={activeChat.friend.avatar} alt={activeChat.friend.displayName} className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover flex-shrink-0" />
               ) : (
                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-base sm:text-lg flex-shrink-0">
                   {activeChat.friend.avatar}
                 </div>
               )}
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <span className="font-semibold text-sm text-[#1A1A2E]">
                   {activeChat.friend.displayName}
                 </span>
                 <div className="flex items-center gap-1">
-                  {activeChat.hasConversation ? (
+                  {activeChat.exists && peerPubKey ? (
                     <>
-                      <Zap className="w-2.5 h-2.5 text-[#7C3AED]" />
-                      <span className="text-[10px] text-[#7C3AED] font-medium">Ephemeral • Free • Private • Real-time</span>
+                      <ShieldCheck className="w-2.5 h-2.5 text-[#16A34A]" />
+                      <span className="text-[10px] text-[#16A34A] font-medium">E2E Encrypted • On-Chain • NaCl Box</span>
+                    </>
+                  ) : activeChat.exists ? (
+                    <>
+                      <KeyRound className="w-2.5 h-2.5 text-[#F59E0B]" />
+                      <span className="text-[10px] text-[#F59E0B] font-medium">Waiting for key exchange...</span>
                     </>
                   ) : (
                     <>
                       <Plus className="w-2.5 h-2.5 text-[#94A3B8]" />
-                      <span className="text-[10px] text-[#94A3B8] font-medium">Send a message to start ephemeral chat</span>
+                      <span className="text-[10px] text-[#94A3B8] font-medium">Send a message to start encrypted chat</span>
                     </>
                   )}
                 </div>
               </div>
-              {activeChat.hasConversation && (
+              {activeChat.exists && (
                 <button
                   onClick={() => loadMessages(activeChat)}
                   disabled={loadingMessages}
@@ -595,69 +623,75 @@ export default function Chat() {
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#FAFBFC]">
               <div className="flex justify-center mb-4">
                 <span className="text-[10px] text-[#94A3B8] bg-white px-3 py-1 rounded-full border border-[#E2E8F0] flex items-center gap-1">
-                  {activeChat.hasConversation ? (
+                  {activeChat.exists && peerPubKey ? (
                     <>
-                      <Zap className="w-2.5 h-2.5 text-[#7C3AED]" /> Ephemeral messages via MagicBlock — free & private
+                      <ShieldCheck className="w-2.5 h-2.5 text-[#16A34A]" /> End-to-end encrypted — NaCl Box on Solana
+                    </>
+                  ) : activeChat.exists ? (
+                    <>
+                      <KeyRound className="w-2.5 h-2.5 text-[#F59E0B]" /> Key exchange in progress...
                     </>
                   ) : (
                     <>
-                      <Shield className="w-2.5 h-2.5" /> First message will create an ephemeral channel
+                      <Shield className="w-2.5 h-2.5" /> First message creates an encrypted channel on-chain
                     </>
                   )}
                 </span>
               </div>
 
-              {setting_up && (
+              {creatingChat && (
                 <div className="flex items-center justify-center py-8">
                   <div className="text-center">
                     <RefreshCw className="w-6 h-6 text-[#7C3AED] animate-spin mx-auto mb-2" />
-                    <p className="text-sm text-[#7C3AED] font-medium">Setting up ephemeral channel...</p>
-                    <p className="text-xs text-[#94A3B8] mt-1">Delegating profile + creating conversation</p>
+                    <p className="text-sm text-[#7C3AED] font-medium">Creating encrypted channel...</p>
+                    <p className="text-xs text-[#94A3B8] mt-1">Establishing keys on Solana</p>
                   </div>
                 </div>
               )}
 
-              {loadingMessages && messages.length === 0 && !setting_up && (
+              {loadingMessages && messages.length === 0 && !creatingChat && (
                 <div className="flex items-center justify-center py-8">
                   <RefreshCw className="w-5 h-5 text-[#94A3B8] animate-spin" />
                 </div>
               )}
 
-              {!loadingMessages && messages.length === 0 && activeChat.hasConversation && !setting_up && (
+              {!loadingMessages && messages.length === 0 && activeChat.exists && !creatingChat && (
                 <div className="text-center py-8">
                   <p className="text-sm text-[#94A3B8]">No messages yet. Say hello! 👋</p>
                 </div>
               )}
 
-              {!activeChat.hasConversation && messages.length === 0 && !setting_up && (
+              {!activeChat.exists && messages.length === 0 && !creatingChat && (
                 <div className="text-center py-8">
-                  <Zap className="w-10 h-10 text-[#7C3AED] mx-auto mb-3" />
-                  <p className="text-sm text-[#64748B] mb-1">Ephemeral messaging powered by MagicBlock</p>
-                  <p className="text-xs text-[#94A3B8]">Messages are free, private & real-time ⚡</p>
-                  <p className="text-xs text-[#94A3B8] mt-1">Send your first message to create the channel</p>
+                  <ShieldCheck className="w-10 h-10 text-[#7C3AED] mx-auto mb-3" />
+                  <p className="text-sm text-[#64748B] mb-1">End-to-end encrypted messaging</p>
+                  <p className="text-xs text-[#94A3B8]">Messages are encrypted with NaCl Box (X25519-XSalsa20-Poly1305)</p>
+                  <p className="text-xs text-[#94A3B8] mt-1">Only you and the recipient can read them 🔐</p>
                 </div>
               )}
 
-              {messages.map((msg, i) => {
-                const isMe = publicKey && msg.sender === publicKey.toBase58();
-                const isPaymentMsg = msg.body.startsWith("💸");
+              {messages.filter(m => !m.isKeyExchange).map((msg, i) => {
+                const displayText = msg.isEncrypted
+                  ? (msg.decrypted || "🔒 Unable to decrypt")
+                  : msg.content;
+                const isPaymentMsg = displayText.startsWith("💸");
 
                 if (isPaymentMsg) {
                   return (
-                    <div key={`${msg.timestamp}-${i}`} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                    <div key={`${msg.timestamp}-${i}`} className={`flex ${msg.isMe ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[280px] rounded-2xl p-3 sm:p-4 ${
-                        isMe
+                        msg.isMe
                           ? "bg-gradient-to-br from-[#16A34A] to-[#15803D] text-white"
                           : "bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7] text-[#15803D]"
                       }`}>
                         <div className="flex items-center gap-2 mb-1">
                           <DollarSign className="w-4 h-4" />
-                          <span className="text-xs font-medium">{isMe ? "You sent" : "Received"}</span>
+                          <span className="text-xs font-medium">{msg.isMe ? "You sent" : "Received"}</span>
                         </div>
-                        <p className="text-lg font-bold">{msg.body.replace("💸 ", "")}</p>
+                        <p className="text-lg font-bold">{displayText.replace("💸 ", "")}</p>
                         <div className="flex items-center gap-1 mt-2">
-                          <Zap className="w-3 h-3" />
-                          <span className="text-[10px] opacity-80">Private Payment</span>
+                          <Lock className="w-3 h-3" />
+                          <span className="text-[10px] opacity-80">Encrypted Payment</span>
                         </div>
                       </div>
                     </div>
@@ -665,20 +699,25 @@ export default function Chat() {
                 }
 
                 return (
-                  <div key={`${msg.timestamp}-${i}`} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                  <div key={`${msg.timestamp}-${i}`} className={`flex ${msg.isMe ? "justify-end" : "justify-start"}`}>
                     <div
                       className={`max-w-[85%] sm:max-w-[320px] px-3.5 sm:px-4 py-2.5 rounded-2xl text-sm ${
-                        isMe
-                          ? "bg-[#2563EB] text-white rounded-br-md"
-                          : "bg-white text-[#1A1A2E] border border-[#E2E8F0] rounded-bl-md"
+                        msg.isMe
+                          ? "chat-bubble-me bg-[#2563EB] text-white rounded-br-md"
+                          : "chat-bubble-them bg-white text-[#1A1A2E] border border-[#E2E8F0] rounded-bl-md"
                       }`}
                     >
-                      <p>{msg.body}</p>
-                      <div className={`flex items-center gap-1 mt-1 ${isMe ? "text-blue-200" : "text-[#94A3B8]"}`}>
+                      <p className="break-words">{displayText}</p>
+                      <div className={`flex items-center gap-1 mt-1 ${msg.isMe ? "text-blue-200" : "text-[#94A3B8]"}`}>
                         <span className="text-[10px]">
-                          {msg.timestamp > 0 ? timeAgo(msg.timestamp * 1000) : "now"}
+                          {Number(msg.timestamp) > 0 ? timeAgo(Number(msg.timestamp) * 1000) : "now"}
                         </span>
-                        <Zap className="w-2 h-2 text-[#7C3AED]" />
+                        {msg.isEncrypted && msg.decrypted && (
+                          <Lock className="w-2 h-2 text-[#16A34A]" />
+                        )}
+                        {msg.isEncrypted && !msg.decrypted && (
+                          <AlertCircle className="w-2 h-2 text-[#EF4444]" />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -704,14 +743,14 @@ export default function Chat() {
                   </div>
                   <button
                     onClick={handleSendPayment}
-                    disabled={!paymentAmount}
+                    disabled={!paymentAmount || sending}
                     className="px-4 py-2.5 bg-[#16A34A] text-white text-sm font-medium rounded-xl hover:bg-[#15803D] disabled:opacity-40 transition-all"
                   >
                     Send
                   </button>
                 </div>
                 <p className="text-[10px] text-[#16A34A] mt-1.5 flex items-center gap-1">
-                  <Zap className="w-2.5 h-2.5" /> SOL transfer on-chain + message recorded in ephemeral channel
+                  <Lock className="w-2.5 h-2.5" /> SOL transfer on-chain + encrypted receipt in chat
                 </p>
               </div>
             )}
@@ -724,13 +763,19 @@ export default function Chat() {
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                  placeholder={setting_up ? "Setting up ephemeral channel..." : "Type a message — free & private ⚡"}
-                  disabled={sending || setting_up}
+                  placeholder={
+                    creatingChat
+                      ? "Setting up encryption..."
+                      : activeChat.exists && !peerPubKey
+                      ? "Waiting for key exchange..."
+                      : "Type a message — E2E encrypted 🔐"
+                  }
+                  disabled={sending || creatingChat}
                   className="flex-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3.5 sm:px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] disabled:opacity-50"
                 />
                 <button
                   onClick={handleSend}
-                  disabled={!messageText.trim() || sending || setting_up}
+                  disabled={!messageText.trim() || sending || creatingChat}
                   className="touch-active w-10 h-10 rounded-xl bg-[#2563EB] text-white flex items-center justify-center hover:bg-[#1D4ED8] disabled:opacity-40 transition-all flex-shrink-0"
                 >
                   {sending ? (
@@ -740,27 +785,31 @@ export default function Chat() {
                   )}
                 </button>
               </div>
+              {activeChat.exists && peerPubKey && (
+                <p className="text-[9px] text-[#94A3B8] mt-1 flex items-center gap-1 px-1">
+                  <ShieldCheck className="w-2.5 h-2.5 text-[#16A34A]" />
+                  Messages encrypted with NaCl Box • ~0.005 SOL per message (reclaimable)
+                </p>
+              )}
             </div>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7C3AED]/10 to-[#2563EB]/10 flex items-center justify-center mx-auto mb-4">
-                <Zap className="w-8 h-8 text-[#7C3AED]" />
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7C3AED]/10 to-[#16A34A]/10 flex items-center justify-center mx-auto mb-4">
+                <ShieldCheck className="w-8 h-8 text-[#7C3AED]" />
               </div>
               <h3 className="font-bold text-[#1A1A2E] mb-1">
                 {chats.length > 0 ? "Select a conversation" : "No contacts yet"}
               </h3>
               <p className="text-sm text-[#64748B]">
                 {chats.length > 0
-                  ? "Ephemeral messaging — free, private & real-time ⚡"
-                  : "Follow people to start chatting"}
+                  ? "End-to-end encrypted messaging on Solana 🔐"
+                  : "Follow people to start encrypted chats"}
               </p>
-              {profileDelegated && (
-                <p className="text-[10px] text-[#7C3AED] mt-2 flex items-center gap-1 justify-center">
-                  <Zap className="w-2.5 h-2.5" /> Profile delegated to MagicBlock ER
-                </p>
-              )}
+              <p className="text-[10px] text-[#94A3B8] mt-2">
+                NaCl Box (X25519-XSalsa20-Poly1305) • Same crypto as Signal
+              </p>
             </div>
           </div>
         )}

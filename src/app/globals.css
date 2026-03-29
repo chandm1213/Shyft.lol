@@ -206,6 +206,23 @@
   background-color: var(--color-surface) !important;
 }
 
+/* ─── Chat-specific dark theme ─── */
+[data-theme="dark"] .chat-container {
+  background-color: var(--color-surface) !important;
+  border-color: #2A2D3A !important;
+}
+[data-theme="dark"] .chat-bubble-me {
+  background-color: #2563EB !important;
+}
+[data-theme="dark"] .chat-bubble-them {
+  background-color: #1E2130 !important;
+  border-color: #2A2D3A !important;
+  color: #E8ECF4 !important;
+}
+[data-theme="dark"] .text-blue-200 {
+  color: rgba(147, 197, 253, 0.7) !important;
+}
+
 /* ─── Backdrop blur elements in dark ─── */
 [data-theme="dark"] .backdrop-blur-lg {
   background-color: rgba(15, 17, 23, 0.92) !important;

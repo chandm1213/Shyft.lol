@@ -1,6 +1,14 @@
 import { Program, AnchorProvider, Idl, BN, BorshCoder } from "@coral-xyz/anchor";
 import { Connection, PublicKey, SystemProgram, Keypair, Transaction } from "@solana/web3.js";
 import idl from "./idl.json";
+import {
+  encryptMessage as naclEncrypt,
+  decryptMessage as naclDecrypt,
+  formatPubkeyMessage,
+  parsePubkeyMessage,
+  isEncryptedMessage,
+  isPubkeyMessage,
+} from "./encryption";
 
 /** Optional session key info for signing without wallet popup */
 export interface SessionOpts {
@@ -1157,6 +1165,220 @@ export class ShyftClient {
     return { createSig, permissionSig, delegateSig: undefined };
   }
 
+  // ========== E2E ENCRYPTED CHAT ==========
+
+  /**
+   * Create an E2E encrypted chat with another user.
+   * 1. Creates the on-chain chat PDA
+   * 2. Publishes sender's encryption public key as the first message
+   */
+  async createE2EChat(
+    chatId: number,
+    user2: PublicKey,
+    myEncryptionPublicKey: Uint8Array
+  ): Promise<{ chatSig: string; keySig: string }> {
+    // Step 1: Create chat
+    const chatSig = await this.createChat(chatId, user2);
+    console.log("✅ E2E Chat created:", chatSig);
+
+    // Step 2: Publish our encryption public key as message index 0
+    const pubkeyContent = formatPubkeyMessage(myEncryptionPublicKey);
+    const keySig = await this.sendMessageSimple(chatId, 0, pubkeyContent);
+    console.log("✅ Encryption pubkey published:", keySig);
+
+    return { chatSig, keySig };
+  }
+
+  /**
+   * Send a message on-chain WITHOUT MagicBlock delegation (simpler, cheaper).
+   * Used for key exchange messages and encrypted chat messages.
+   */
+  async sendMessageSimple(
+    chatId: number,
+    messageIndex: number,
+    content: string,
+    isPayment: boolean = false,
+    paymentAmount: number = 0
+  ): Promise<string> {
+    const sender = this.provider.wallet.publicKey;
+    const [messagePda] = getMessagePda(chatId, messageIndex);
+    const [chatPda] = getChatPda(chatId);
+
+    const sig = await this.program.methods
+      .sendMessage(new BN(chatId), new BN(messageIndex), content, isPayment, new BN(paymentAmount))
+      .accounts({
+        message: messagePda,
+        chat: chatPda,
+        sender,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Invalidate caches
+    rpcCache.invalidate("messages:");
+    rpcCache.invalidate("allMessages");
+    rpcCache.invalidate("allChatsForUser");
+
+    return sig;
+  }
+
+  /**
+   * Send an E2E encrypted message.
+   * Encrypts the plaintext with NaCl box, then stores the ciphertext on-chain.
+   */
+  async sendE2EMessage(
+    chatId: number,
+    messageIndex: number,
+    plaintext: string,
+    mySecretKey: Uint8Array,
+    theirPublicKey: Uint8Array,
+    isPayment: boolean = false,
+    paymentAmount: number = 0
+  ): Promise<string> {
+    const encryptedContent = naclEncrypt(plaintext, mySecretKey, theirPublicKey);
+    return this.sendMessageSimple(chatId, messageIndex, encryptedContent, isPayment, paymentAmount);
+  }
+
+  /**
+   * Publish encryption public key in an existing chat (for the second participant).
+   * Sends it as the next available message index.
+   */
+  async publishEncryptionKey(
+    chatId: number,
+    messageIndex: number,
+    encryptionPublicKey: Uint8Array
+  ): Promise<string> {
+    const content = formatPubkeyMessage(encryptionPublicKey);
+    return this.sendMessageSimple(chatId, messageIndex, content);
+  }
+
+  /**
+   * Find the encryption public key of the OTHER participant in a chat.
+   * Scans messages for PUBKEY: prefixed content from someone other than `myAddress`.
+   */
+  async findPeerEncryptionKey(chatId: number, myAddress: string): Promise<Uint8Array | null> {
+    const messages = await this.getMessagesForChat(chatId);
+    for (const msg of messages) {
+      if (msg.sender === myAddress) continue;
+      if (isPubkeyMessage(msg.content)) {
+        const key = parsePubkeyMessage(msg.content);
+        if (key && key.length === 32) return key;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find MY encryption public key in a chat (to check if already published).
+   */
+  async findMyEncryptionKey(chatId: number, myAddress: string): Promise<boolean> {
+    const messages = await this.getMessagesForChat(chatId);
+    for (const msg of messages) {
+      if (msg.sender === myAddress && isPubkeyMessage(msg.content)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Fetch and decrypt all messages for a chat.
+   * Returns decrypted plaintext for encrypted messages,
+   * or raw content for unencrypted / key-exchange messages.
+   */
+  async getDecryptedMessages(
+    chatId: number,
+    myAddress: string,
+    mySecretKey: Uint8Array,
+    peerPublicKey: Uint8Array
+  ): Promise<{
+    publicKey: string;
+    chatId: string;
+    messageIndex: number;
+    sender: string;
+    content: string;
+    decrypted: string | null;
+    isPayment: boolean;
+    paymentAmount: number;
+    timestamp: string;
+    isKeyExchange: boolean;
+    isEncrypted: boolean;
+    isMe: boolean;
+  }[]> {
+    const rawMessages = await this.getMessagesForChat(chatId);
+
+    return rawMessages.map((msg: any) => {
+      const isMe = msg.sender === myAddress;
+      const isKeyEx = isPubkeyMessage(msg.content);
+      const isEnc = isEncryptedMessage(msg.content);
+
+      let decrypted: string | null = null;
+      if (isEnc) {
+        // For encrypted messages, the "sender" used the sender's secret key + recipient's public key
+        // So to decrypt: we need the sender's PUBLIC key + our SECRET key
+        if (isMe) {
+          // We sent this — we can't decrypt our own outgoing messages with naclDecrypt
+          // because we encrypted with (ourSecret, theirPublic) but to decrypt
+          // we'd need (ourPublic, ourSecret) which isn't how NaCl box works.
+          // Instead re-derive: we encrypted with our secret + their public,
+          // so we decrypt with their public + our secret (same operation!)
+          decrypted = naclDecrypt(msg.content, peerPublicKey, mySecretKey);
+        } else {
+          // They sent this — encrypted with their secret + our public
+          // We decrypt with their public + our secret
+          decrypted = naclDecrypt(msg.content, peerPublicKey, mySecretKey);
+        }
+      }
+
+      return {
+        publicKey: msg.publicKey,
+        chatId: msg.chatId,
+        messageIndex: msg.messageIndex,
+        sender: msg.sender,
+        content: msg.content,
+        decrypted,
+        isPayment: msg.isPayment,
+        paymentAmount: msg.paymentAmount,
+        timestamp: msg.timestamp,
+        isKeyExchange: isKeyEx,
+        isEncrypted: isEnc,
+        isMe,
+      };
+    });
+  }
+
+  /**
+   * Get or create a chat with another user.
+   * If a chat already exists (either direction), returns it.
+   * Otherwise creates a new one with key exchange.
+   */
+  async getOrCreateE2EChat(
+    user2: PublicKey,
+    myEncryptionPublicKey: Uint8Array
+  ): Promise<{ chatId: number; isNew: boolean }> {
+    const user1 = this.provider.wallet.publicKey;
+    const chatId = deriveChatId(user1, user2);
+
+    // Check if chat already exists
+    const existing = await this.getChat(chatId);
+    if (existing) {
+      // Chat exists — check if we've published our key
+      const myAddr = user1.toBase58();
+      const hasMyKey = await this.findMyEncryptionKey(chatId, myAddr);
+      if (!hasMyKey) {
+        // Publish our key
+        const chat = existing;
+        const msgIndex = Number(chat.messageCount || 0);
+        await this.publishEncryptionKey(chatId, msgIndex, myEncryptionPublicKey);
+      }
+      return { chatId, isNew: false };
+    }
+
+    // Create new chat + publish key
+    await this.createE2EChat(chatId, user2, myEncryptionPublicKey);
+    return { chatId, isNew: true };
+  }
+
   // ========== FOLLOW ==========
 
   async followUser(targetPubkey: PublicKey): Promise<string> {
@@ -1782,3 +2004,14 @@ export {
   MAGIC_VAULT,
   ER_RPC_URL,
 };
+
+// Re-export encryption utilities for use in components
+export {
+  encryptMessage as naclEncryptMessage,
+  decryptMessage as naclDecryptMessage,
+  formatPubkeyMessage,
+  parsePubkeyMessage,
+  isEncryptedMessage,
+  isPubkeyMessage,
+} from "./encryption";
+export { deriveEncryptionKeypair } from "./encryption";
