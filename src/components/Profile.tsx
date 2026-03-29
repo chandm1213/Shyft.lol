@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   ArrowLeft,
   Calendar,
@@ -22,15 +22,24 @@ import {
   Pencil,
   X,
   Loader2,
+  Key,
+  Wallet,
+  ArrowDownToLine,
+  QrCode,
+  RefreshCw,
+  Send,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useProgram } from "@/hooks/useProgram";
-import { useWallet } from "@/hooks/usePrivyWallet";
-import { PublicKey } from "@solana/web3.js";
+import { useWallet, useConnection } from "@/hooks/usePrivyWallet";
+import { usePrivy } from "@privy-io/react-auth";
+import { useExportWallet } from "@privy-io/react-auth/solana";
+import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { toast } from "@/components/Toast";
 import { RichContent } from "@/components/RichContent";
 import { uploadImage } from "@/components/RichContent";
-import { ShyftClient, clearRpcCache } from "@/lib/program";
+import { ShyftClient, clearRpcCache, SessionOpts } from "@/lib/program";
+import { useSessionKey } from "@/hooks/useSessionKey";
 
 /* ───────── Types ───────── */
 interface OnChainPost {
@@ -46,6 +55,10 @@ interface OnChainPost {
 }
 
 /* ───────── Helpers ───────── */
+
+// Gold badge for OG / founder accounts (module-level so all components can use it)
+const GOLD_BADGE_USERNAMES = ["shaan"];
+
 function timeAgo(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000);
   if (s < 60) return "just now";
@@ -88,6 +101,7 @@ export default function Profile() {
   const { currentUser, setCurrentUser, isConnected } = useAppStore();
   const program = useProgram();
   const { publicKey } = useWallet();
+  const sessionState = useSessionKey();
 
   /* state */
   const [loading, setLoading] = useState(true);
@@ -95,6 +109,7 @@ export default function Profile() {
   const [myPosts, setMyPosts] = useState<OnChainPost[]>([]);
   const [allComments, setAllComments] = useState<any[]>([]);
   const [allReactions, setAllReactions] = useState<any[]>([]);
+  const [profileMap, setProfileMap] = useState<Record<string, any>>({});
   const [activeTab, setActiveTab] = useState<"posts" | "likes">("posts");
   const [copied, setCopied] = useState(false);
   const [realFollowerCount, setRealFollowerCount] = useState(0);
@@ -106,6 +121,31 @@ export default function Profile() {
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [creating, setCreating] = useState(false);
+
+  /* wallet management */
+  const { connection } = useConnection();
+  const { user: privyUser } = usePrivy();
+  const { exportWallet: exportSolanaWallet } = useExportWallet();
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [loadingBalance, setLoadingBalance] = useState(false);
+  const [showQR, setShowQR] = useState(false);
+
+  // Detect if the user has a Privy embedded wallet
+  // Log linked accounts for debugging
+  useEffect(() => {
+    if (privyUser?.linkedAccounts) {
+      console.log("🔑 Privy linked accounts:", JSON.stringify(privyUser.linkedAccounts.map((a: any) => ({
+        type: a.type, chainType: a.chainType, walletClientType: a.walletClientType, address: a.address?.slice(0, 8)
+      })), null, 2));
+    }
+  }, [privyUser]);
+
+  const embeddedSolanaWallet = privyUser?.linkedAccounts?.find(
+    (a: any) => a.type === 'wallet' && (a.walletClientType === 'privy' || a.walletClientType === 'privy-v2')
+  ) as any;
+  // If no embedded wallet found in linkedAccounts, check if the connected wallet address matches any embedded wallet
+  const isEmbeddedWallet = !!embeddedSolanaWallet;
+  const walletClientName = isEmbeddedWallet ? 'Privy Embedded' : 'External';
 
   /* edit mode */
   const [editing, setEditing] = useState(false);
@@ -127,6 +167,49 @@ export default function Profile() {
     }
     fetchProfile();
   }, [program, publicKey]);
+
+  // Fetch wallet SOL balance
+  const fetchBalance = useCallback(async () => {
+    if (!publicKey || !connection) return;
+    setLoadingBalance(true);
+    try {
+      const bal = await connection.getBalance(publicKey);
+      setWalletBalance(bal / LAMPORTS_PER_SOL);
+    } catch (err) {
+      console.error("Balance fetch error:", err);
+    }
+    setLoadingBalance(false);
+  }, [publicKey, connection]);
+
+  useEffect(() => {
+    fetchBalance();
+    // Auto-refresh balance every 30s
+    const interval = setInterval(fetchBalance, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchBalance]);
+
+  async function handleExportWallet() {
+    if (!publicKey) {
+      toast("error", "No wallet", "Connect a wallet first.");
+      return;
+    }
+    
+    // Try to find the embedded wallet address to pass to Privy
+    const walletAddress = embeddedSolanaWallet?.address || publicKey.toBase58();
+    console.log("🔑 Exporting wallet:", { walletAddress, isEmbeddedWallet, embeddedSolanaWallet: !!embeddedSolanaWallet });
+    
+    if (!isEmbeddedWallet) {
+      toast("error", "External wallet", `Your wallet is managed by ${walletClientName}. Open ${walletClientName} to view your private key.`);
+      return;
+    }
+    try {
+      // Use Solana-specific export hook (the EVM one from usePrivy validates Ethereum addresses)
+      await exportSolanaWallet({ address: walletAddress });
+    } catch (err: any) {
+      console.error("Export wallet error:", err);
+      toast("error", "Export failed", err?.message?.slice(0, 80) || "Could not export wallet");
+    }
+  }
 
   async function fetchProfile() {
     if (!program || !publicKey) return;
@@ -167,13 +250,17 @@ export default function Profile() {
         .sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
       setMyPosts(mine);
 
-      // fetch comments & reactions
-      const [comments, reactions] = await Promise.all([
+      // fetch comments, reactions, and profiles
+      const [comments, reactions, profiles] = await Promise.all([
         program.getAllComments(),
         program.getAllReactions(),
+        program.getAllProfiles(),
       ]);
       setAllComments(comments);
       setAllReactions(reactions);
+      const pMap: Record<string, any> = {};
+      for (const p of profiles) pMap[p.owner || p.publicKey] = p;
+      setProfileMap(pMap);
     } catch (err) {
       console.error("Profile fetch error:", err);
     }
@@ -297,6 +384,11 @@ export default function Profile() {
   const profileBio = onChainProfile?.bio || currentUser?.bio || "";
   const avatarUrl = onChainProfile?.avatarUrl || currentUser?.avatarUrl || "";
   const bannerUrl = onChainProfile?.bannerUrl || currentUser?.bannerUrl || "";
+
+  // Gold badge for OG / founder accounts
+  const isGoldBadge = GOLD_BADGE_USERNAMES.includes(profileUsername.toLowerCase());
+  const badgeBg = isGoldBadge ? "bg-gradient-to-br from-[#F59E0B] to-[#D97706]" : "bg-[#2563EB]";
+  const badgeTextColor = isGoldBadge ? "text-[#F59E0B]" : "text-[#2563EB]";
 
   /* ════════════ NOT CONNECTED ════════════ */
   if (!isConnected || !publicKey) {
@@ -475,7 +567,7 @@ export default function Profile() {
               </div>
             )}
             {/* on-chain verified badge */}
-            <div className="absolute -bottom-0.5 -right-0.5 w-6 h-6 bg-[#2563EB] rounded-full flex items-center justify-center border-2 border-white">
+            <div className={`absolute -bottom-0.5 -right-0.5 w-6 h-6 ${badgeBg} rounded-full flex items-center justify-center border-2 border-white`}>
               <BadgeCheck className="w-3.5 h-3.5 text-white" />
             </div>
           </div>
@@ -514,7 +606,10 @@ export default function Profile() {
           <div className="flex items-center gap-1.5">
             <h2 className="text-xl font-extrabold text-[#1A1A2E]">{profileName}</h2>
           </div>
-          <p className="text-[15px] text-[#64748B]">@{profileUsername}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-[15px] text-[#64748B]">@{profileUsername}</p>
+            {isGoldBadge && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-[#F59E0B] to-[#D97706] text-white">OG</span>}
+          </div>
         </div>
 
         {/* Bio */}
@@ -552,6 +647,115 @@ export default function Profile() {
               Follower{followerCount !== 1 ? "s" : ""}
             </span>
           </button>
+        </div>
+      </div>
+
+      {/* ── Wallet Management ── */}
+      <div className="bg-white border-x border-[#E2E8F0] px-4 py-4 border-b">
+        <div className="bg-gradient-to-br from-[#F8FAFC] to-[#EFF6FF] rounded-2xl border border-[#E2E8F0] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-[#2563EB]/10 flex items-center justify-center">
+                <Wallet className="w-4 h-4 text-[#2563EB]" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#1A1A2E]">Wallet</h3>
+                <p className="text-[11px] text-[#64748B]">Solana Devnet · {isEmbeddedWallet ? 'Embedded' : walletClientName}</p>
+              </div>
+            </div>
+            <button
+              onClick={fetchBalance}
+              disabled={loadingBalance}
+              className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/80 transition-colors"
+              title="Refresh balance"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#64748B] ${loadingBalance ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+
+          {/* Balance */}
+          <div className="mb-4">
+            <p className="text-[11px] text-[#64748B] mb-0.5">Balance</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-extrabold text-[#1A1A2E]">
+                {walletBalance !== null ? walletBalance.toFixed(4) : "..."}
+              </span>
+              <span className="text-sm font-medium text-[#64748B]">SOL</span>
+            </div>
+            {walletBalance !== null && walletBalance < 0.01 && (
+              <p className="text-[11px] text-amber-600 mt-1">⚠️ Low balance — you need SOL for posts, comments & reactions</p>
+            )}
+          </div>
+
+          {/* Wallet address with copy */}
+          <div className="mb-4 bg-white rounded-xl border border-[#E2E8F0] px-3 py-2.5 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] text-[#94A3B8] mb-0.5">Wallet Address</p>
+              <p className="text-xs font-mono text-[#1A1A2E] truncate">{publicKey?.toBase58()}</p>
+            </div>
+            <button
+              onClick={copyWallet}
+              className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F1F5F9] transition-colors"
+              title="Copy address"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-[#16A34A]" /> : <Copy className="w-3.5 h-3.5 text-[#64748B]" />}
+            </button>
+          </div>
+
+          {/* QR Code (togglable) */}
+          {showQR && publicKey && (
+            <div className="mb-4 flex flex-col items-center bg-white rounded-xl border border-[#E2E8F0] p-4">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${publicKey.toBase58()}`}
+                alt="Wallet QR Code"
+                className="w-[180px] h-[180px] rounded-lg"
+              />
+              <p className="text-[11px] text-[#64748B] mt-2">Scan to send SOL to this wallet</p>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="grid grid-cols-3 gap-2">
+            {isEmbeddedWallet ? (
+              <button
+                onClick={handleExportWallet}
+                className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white rounded-xl border border-[#E2E8F0] hover:bg-[#F8FAFC] hover:border-[#2563EB]/30 transition-all group"
+              >
+                <Key className="w-4 h-4 text-[#64748B] group-hover:text-[#2563EB] transition-colors" />
+                <span className="text-[11px] font-medium text-[#64748B] group-hover:text-[#1A1A2E] transition-colors">Export Key</span>
+              </button>
+            ) : (
+              <div
+                className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white rounded-xl border border-[#E2E8F0] opacity-60"
+                title={`Managed by ${walletClientName}`}
+              >
+                <Key className="w-4 h-4 text-[#94A3B8]" />
+                <span className="text-[11px] font-medium text-[#94A3B8]">{walletClientName}</span>
+              </div>
+            )}
+            <button
+              onClick={() => setShowQR(!showQR)}
+              className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border transition-all group ${
+                showQR
+                  ? "bg-[#EFF6FF] border-[#2563EB]/30 text-[#2563EB]"
+                  : "bg-white border-[#E2E8F0] hover:bg-[#F8FAFC] hover:border-[#2563EB]/30"
+              }`}
+            >
+              <QrCode className={`w-4 h-4 ${showQR ? "text-[#2563EB]" : "text-[#64748B] group-hover:text-[#2563EB]"} transition-colors`} />
+              <span className={`text-[11px] font-medium ${showQR ? "text-[#2563EB]" : "text-[#64748B] group-hover:text-[#1A1A2E]"} transition-colors`}>
+                {showQR ? "Hide QR" : "Receive"}
+              </span>
+            </button>
+            <a
+              href={`https://explorer.solana.com/address/${publicKey?.toBase58()}?cluster=devnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white rounded-xl border border-[#E2E8F0] hover:bg-[#F8FAFC] hover:border-[#2563EB]/30 transition-all group"
+            >
+              <ExternalLink className="w-4 h-4 text-[#64748B] group-hover:text-[#2563EB] transition-colors" />
+              <span className="text-[11px] font-medium text-[#64748B] group-hover:text-[#1A1A2E] transition-colors">Explorer</span>
+            </a>
+          </div>
         </div>
       </div>
 
@@ -600,6 +804,11 @@ export default function Profile() {
                   avatarUrl={avatarUrl}
                   comments={allComments.filter((c) => c.post === post.publicKey)}
                   reactions={allReactions.filter((r) => r.post === post.publicKey)}
+                  program={program}
+                  sessionState={sessionState}
+                  profileMap={profileMap}
+                  publicKey={publicKey}
+                  onInteraction={() => fetchProfile()}
                 />
               ))
             )}
@@ -740,6 +949,11 @@ function ProfilePostCard({
   avatarUrl,
   comments,
   reactions,
+  program,
+  sessionState,
+  profileMap,
+  publicKey,
+  onInteraction,
 }: {
   post: OnChainPost;
   profileName: string;
@@ -747,10 +961,22 @@ function ProfilePostCard({
   avatarUrl?: string;
   comments: any[];
   reactions: any[];
+  program: ShyftClient | null;
+  sessionState: any;
+  profileMap: Record<string, any>;
+  publicKey: PublicKey | null;
+  onInteraction: () => void;
 }) {
+  const { likedPosts, addLikedPost, isConnected } = useAppStore();
   const [showComments, setShowComments] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [commenting, setCommenting] = useState(false);
+  const [liking, setLiking] = useState(false);
+  const [localLikeBoost, setLocalLikeBoost] = useState(0);
+  const [reposting, setReposting] = useState(false);
   const ts = Number(post.createdAt) * 1000;
-  const likeCount = Number(post.likes || 0);
+  const hasLiked = likedPosts.includes(post.publicKey);
+  const likeCount = Number(post.likes || 0) + localLikeBoost;
   const commentCount = comments.length;
 
   // Group reactions
@@ -759,6 +985,115 @@ function ProfilePostCard({
     reactionCounts[r.reactionType] = (reactionCounts[r.reactionType] || 0) + 1;
   }
   const totalReactions = reactions.length;
+
+  const getSessionOpts = async (): Promise<SessionOpts | undefined> => {
+    if (!publicKey) return undefined;
+    if (sessionState.isActive && sessionState.sessionKeypair && sessionState.sessionTokenPda) {
+      return { sessionKeypair: sessionState.sessionKeypair, sessionTokenPda: sessionState.sessionTokenPda, authority: publicKey };
+    }
+    const result = await sessionState.createSession();
+    if (result) return { sessionKeypair: result.keypair, sessionTokenPda: result.tokenPda, authority: publicKey };
+    return undefined;
+  };
+
+  const handleLike = async () => {
+    if (!program || !isConnected || hasLiked || liking) return;
+    setLiking(true);
+    try {
+      const authorPubkey = new PublicKey(post.author);
+      const postId = Number(post.postId);
+      const session = await getSessionOpts();
+      try {
+        await program.likePost(authorPubkey, postId, session);
+      } catch (firstErr: any) {
+        const msg = firstErr?.message || "";
+        if (session && (msg.includes("insufficient") || msg.includes("0x1") || msg.includes("custom program error"))) {
+          await program.likePost(authorPubkey, postId, undefined);
+        } else throw firstErr;
+      }
+      addLikedPost(post.publicKey);
+      setLocalLikeBoost((prev) => prev + 1);
+      toast("success", "Liked! ❤️", "Recorded on-chain");
+    } catch (err: any) {
+      console.error("Like error:", err);
+      toast("error", "Like failed", err?.message?.slice(0, 80) || "Please try again");
+    }
+    setLiking(false);
+  };
+
+  const handleComment = async () => {
+    if (!commentText.trim() || !program || !publicKey || commenting) return;
+    setCommenting(true);
+    try {
+      const authorPubkey = new PublicKey(post.author);
+      const postId = Number(post.postId);
+      const commentIndex = Date.now();
+      const session = await getSessionOpts();
+      try {
+        await program.createComment(authorPubkey, postId, commentIndex, commentText.trim(), session);
+      } catch (firstErr: any) {
+        const msg = firstErr?.message || "";
+        if (session && (msg.includes("insufficient") || msg.includes("0x1") || msg.includes("custom program error"))) {
+          await program.createComment(authorPubkey, postId, commentIndex, commentText.trim(), undefined);
+        } else throw firstErr;
+      }
+      setCommentText("");
+      toast("success", "Comment posted! 💬", "On-chain");
+      onInteraction();
+    } catch (err: any) {
+      console.error("Comment error:", err);
+      toast("error", "Comment failed", err?.message?.slice(0, 80) || "Please try again");
+    }
+    setCommenting(false);
+  };
+
+  const handleShare = async () => {
+    const authorName = profileUsername ? `@${profileUsername}` : post.author.slice(0, 8);
+    const preview = post.content.length > 80 ? post.content.slice(0, 80) + "..." : post.content;
+    const shareUrl = `https://www.shyft.lol`;
+    const shareText = `"${preview}" — ${authorName} on Shyft\n\n${shareUrl}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${authorName} on Shyft`, text: `"${preview}"`, url: shareUrl });
+      } catch {}
+    } else {
+      await navigator.clipboard.writeText(shareText);
+      toast("success", "Link copied! 🔗", "Share it with your friends");
+    }
+  };
+
+  const handleRepost = async () => {
+    if (reposting || !program || !publicKey) return;
+    setReposting(true);
+    try {
+      const authorName = profileUsername ? `@${profileUsername}` : post.author.slice(0, 8);
+      const preview = post.content.length > 120 ? post.content.slice(0, 120) + "..." : post.content;
+      const repostContent = `RT|${authorName}|${preview}`;
+      const postId = Date.now();
+      const session = await getSessionOpts();
+      try {
+        await program.createPost(postId, repostContent, false, session);
+      } catch (firstErr: any) {
+        const msg = firstErr?.message || "";
+        if (session && (msg.includes("insufficient") || msg.includes("0x1") || msg.includes("custom program error"))) {
+          await program.createPost(postId, repostContent, false, undefined);
+        } else throw firstErr;
+      }
+      toast("success", "Reposted! 🔁", "Published on-chain");
+      onInteraction();
+    } catch (err: any) {
+      console.error("Repost error:", err);
+      toast("error", "Repost failed", err?.message?.slice(0, 80) || "Please try again");
+    }
+    setReposting(false);
+  };
+
+  const resolveAuthor = (addr: string) => {
+    const p = profileMap[addr];
+    if (p?.displayName) return p.displayName;
+    if (p?.username) return `@${p.username}`;
+    return shortKey(addr);
+  };
 
   return (
     <div className="border-b border-[#E2E8F0] px-4 py-3 hover:bg-[#F8FAFC]/50 transition-colors">
@@ -776,7 +1111,7 @@ function ProfilePostCard({
           {/* Author line */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-bold text-[15px] text-[#1A1A2E] truncate">{profileName}</span>
-            <BadgeCheck className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
+            <BadgeCheck className={`w-4 h-4 flex-shrink-0 ${GOLD_BADGE_USERNAMES.includes(profileUsername.toLowerCase()) ? "text-[#F59E0B]" : "text-[#2563EB]"}`} />
             <span className="text-[15px] text-[#64748B] truncate">@{profileUsername}</span>
             <span className="text-[#64748B]">·</span>
             <span className="text-[13px] text-[#64748B] flex-shrink-0">{timeAgo(ts)}</span>
@@ -784,7 +1119,41 @@ function ProfilePostCard({
 
           {/* Content */}
           <div className="mt-1">
-            <RichContent content={post.content} />
+            {(() => {
+              if (post.content.startsWith("RT|")) {
+                const parts = post.content.split("|");
+                const rtAuthor = parts[1] || "";
+                const rtContent = parts.slice(2).join("|");
+                return (
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] mb-2">
+                      <Repeat2 className="w-3.5 h-3.5" />
+                      <span>Reposted from <span className="font-semibold text-[#1A1A2E]">{rtAuthor}</span></span>
+                    </div>
+                    <div className="border border-[#E2E8F0] rounded-xl px-4 py-3 bg-[#F8FAFC]">
+                      <RichContent content={rtContent} />
+                    </div>
+                  </div>
+                );
+              }
+              const legacyMatch = post.content.match(/^\u{1F501}\s*Repost from (@\w+):\s*[\\n]*\s*"?([\s\S]*?)"?\s*$/u);
+              if (legacyMatch) {
+                const rtAuthor = legacyMatch[1];
+                const rtContent = legacyMatch[2].replace(/\\n/g, '').replace(/^"|"$/g, '').trim();
+                return (
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] mb-2">
+                      <Repeat2 className="w-3.5 h-3.5" />
+                      <span>Reposted from <span className="font-semibold text-[#1A1A2E]">{rtAuthor}</span></span>
+                    </div>
+                    <div className="border border-[#E2E8F0] rounded-xl px-4 py-3 bg-[#F8FAFC]">
+                      <RichContent content={rtContent} />
+                    </div>
+                  </div>
+                );
+              }
+              return <RichContent content={post.content} />;
+            })()}
           </div>
 
           {/* Reaction chips */}
@@ -814,43 +1183,83 @@ function ProfilePostCard({
               </span>
             </button>
 
-            {/* Repost placeholder */}
-            <button className="group flex items-center gap-1.5 px-2 py-1.5 rounded-full hover:bg-[#F0FDF4] transition-colors">
-              <Repeat2 className="w-4 h-4 text-[#64748B] group-hover:text-[#16A34A] transition-colors" />
+            {/* Repost — creates on-chain repost */}
+            <button
+              onClick={handleRepost}
+              disabled={reposting || !isConnected}
+              className="group flex items-center gap-1.5 px-2 py-1.5 rounded-full hover:bg-[#F0FDF4] transition-colors disabled:opacity-40"
+            >
+              <Repeat2 className={`w-4 h-4 transition-colors ${reposting ? "text-[#16A34A] animate-spin" : "text-[#64748B] group-hover:text-[#16A34A]"}`} />
             </button>
 
             {/* Likes */}
-            <button className="group flex items-center gap-1.5 px-2 py-1.5 rounded-full hover:bg-[#FEF2F2] transition-colors">
-              <Heart className="w-4 h-4 text-[#64748B] group-hover:text-[#EF4444] transition-colors" />
-              <span className="text-[13px] text-[#64748B] group-hover:text-[#EF4444] transition-colors">
+            <button
+              onClick={handleLike}
+              disabled={hasLiked || liking}
+              className="group flex items-center gap-1.5 px-2 py-1.5 rounded-full hover:bg-[#FEF2F2] transition-colors disabled:opacity-50"
+            >
+              <Heart className={`w-4 h-4 transition-colors ${hasLiked ? "text-[#EF4444] fill-[#EF4444]" : "text-[#64748B] group-hover:text-[#EF4444]"}`} />
+              <span className={`text-[13px] transition-colors ${hasLiked ? "text-[#EF4444]" : "text-[#64748B] group-hover:text-[#EF4444]"}`}>
                 {likeCount || ""}
               </span>
             </button>
 
             {/* Share */}
-            <button className="group flex items-center px-2 py-1.5 rounded-full hover:bg-[#EBF4FF] transition-colors">
+            <button
+              onClick={handleShare}
+              className="group flex items-center px-2 py-1.5 rounded-full hover:bg-[#EBF4FF] transition-colors"
+            >
               <Share className="w-4 h-4 text-[#64748B] group-hover:text-[#2563EB] transition-colors" />
             </button>
           </div>
 
-          {/* Comments list */}
-          {showComments && comments.length > 0 && (
-            <div className="mt-2 space-y-2 border-l-2 border-[#E2E8F0] pl-3 ml-1">
-              {comments
-                .sort((a: any, b: any) => Number(a.createdAt) - Number(b.createdAt))
-                .map((c: any, i: number) => (
-                  <div key={i} className="text-[13px]">
-                    <span className="font-semibold text-[#1A1A2E]">
-                      {shortKey(c.author)}
-                    </span>
-                    <span className="text-[#64748B] ml-1.5">
-                      {c.content}
-                    </span>
-                    <span className="text-[#94A3B8] ml-1.5">
-                      · {timeAgo(Number(c.createdAt) * 1000)}
-                    </span>
-                  </div>
-                ))}
+          {/* Comments section */}
+          {showComments && (
+            <div className="mt-2 border-l-2 border-[#E2E8F0] pl-3 ml-1">
+              {comments.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  {comments
+                    .sort((a: any, b: any) => Number(a.createdAt) - Number(b.createdAt))
+                    .map((c: any, i: number) => (
+                      <div key={i} className="text-[13px]">
+                        <span className="font-semibold text-[#1A1A2E]">
+                          {resolveAuthor(c.author)}
+                        </span>
+                        <span className="text-[#64748B] ml-1.5">
+                          {c.content}
+                        </span>
+                        <span className="text-[#94A3B8] ml-1.5">
+                          · {timeAgo(Number(c.createdAt) * 1000)}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+              {comments.length === 0 && (
+                <p className="text-xs text-[#94A3B8] mb-2">No comments yet.</p>
+              )}
+              {/* Comment input */}
+              {isConnected && (
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleComment()}
+                    maxLength={100}
+                    placeholder={commenting ? "Posting..." : "Write a comment..."}
+                    disabled={commenting}
+                    className="flex-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2563EB]/30 disabled:opacity-50"
+                  />
+                  <button
+                    onClick={handleComment}
+                    disabled={!commentText.trim() || commenting}
+                    className="w-7 h-7 rounded-md bg-[#2563EB] text-white flex items-center justify-center hover:bg-[#1D4ED8] disabled:opacity-40 transition-colors flex-shrink-0"
+                  >
+                    <Send className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

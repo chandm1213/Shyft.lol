@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Share2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X } from "lucide-react";
+import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck } from "lucide-react";
+
+// Gold badge for OG / founder accounts
+const GOLD_BADGE_USERNAMES = ["shaan"];
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
 import { RichContent, MediaBar, uploadImage } from "@/components/RichContent";
@@ -44,6 +47,7 @@ function OnChainPostCard({
   profileMap,
   onCommentAdded,
   onReactionAdded,
+  onRepost,
   sessionState,
 }: {
   post: any;
@@ -55,6 +59,7 @@ function OnChainPostCard({
   profileMap: Record<string, any>;
   onCommentAdded: () => void;
   onReactionAdded: () => void;
+  onRepost: (content: string) => void;
   sessionState: SessionKeyState;
 }) {
   const { likedPosts, addLikedPost, isConnected, currentUser } = useAppStore();
@@ -66,6 +71,7 @@ function OnChainPostCard({
   const [commenting, setCommenting] = useState(false);
   const [reacting, setReacting] = useState(false);
   const [localLikeBoost, setLocalLikeBoost] = useState(0);
+  const [reposting, setReposting] = useState(false);
 
   const hasLiked = likedPosts.includes(post.publicKey);
 
@@ -107,16 +113,14 @@ function OnChainPostCard({
     if (r.user === myAddr) myReactionType = r.reactionType;
   }
 
-  const displayName = isMe
-    ? "You"
-    : profile?.displayName && profile.displayName !== "You" && profile.displayName !== "Anonymous"
-      ? profile.displayName
-      : post.author.slice(0, 4) + "..." + post.author.slice(-4);
-  const username = isMe
-    ? "you"
-    : profile?.username && profile.username !== "you" && profile.username !== "anon"
-      ? profile.username
-      : post.author.slice(0, 8);
+  const displayName = profile?.displayName && profile.displayName !== "Anonymous"
+    ? profile.displayName
+    : post.author.slice(0, 4) + "..." + post.author.slice(-4);
+  const username = profile?.username && profile.username !== "anon"
+    ? profile.username
+    : post.author.slice(0, 8);
+  // Use actual on-chain username for badge color
+  const realUsername = profile?.username || "";
 
   const handleLike = async () => {
     if (!program || !isConnected || hasLiked || liking) return;
@@ -125,7 +129,17 @@ function OnChainPostCard({
       const authorPubkey = new PublicKey(post.author);
       const postId = Number(post.postId);
       const session = await getSessionOpts();
-      await program.likePost(authorPubkey, postId, session);
+      try {
+        await program.likePost(authorPubkey, postId, session);
+      } catch (firstErr: any) {
+        const msg = firstErr?.message || "";
+        if (session && (msg.includes("insufficient") || msg.includes("0x1") || msg.includes("custom program error"))) {
+          console.warn("🔑 Session key may be exhausted, retrying without session...");
+          await program.likePost(authorPubkey, postId, undefined);
+        } else {
+          throw firstErr;
+        }
+      }
       addLikedPost(post.publicKey);
       setLocalLikeBoost((prev) => prev + 1);
       toast("success", "Liked! ❤️", "Recorded on-chain — visible to everyone");
@@ -133,6 +147,8 @@ function OnChainPostCard({
       console.error("Like error:", err);
       if (err?.message?.includes("User rejected") || err?.message?.includes("rejected the request")) {
         toast("error", "Like cancelled", "You rejected the transaction");
+      } else if (err?.message?.includes("insufficient") || err?.message?.includes("0x1")) {
+        toast("error", "Insufficient SOL", "Your wallet needs more SOL to interact.");
       } else {
         toast("error", "Like failed", err?.message?.slice(0, 80) || "Please try again");
       }
@@ -141,14 +157,31 @@ function OnChainPostCard({
   };
 
   const handleComment = async () => {
-    if (!commentText.trim() || !currentUser || !program || commenting) return;
+    if (!commentText.trim()) return;
+    if (!program || !walletKey) {
+      toast("error", "Not ready", "Wallet or program not loaded yet. Please wait...");
+      return;
+    }
+    if (commenting) return;
     setCommenting(true);
     try {
       const authorPubkey = new PublicKey(post.author);
       const postId = Number(post.postId);
       const commentIndex = Date.now(); // unique index
       const session = await getSessionOpts();
-      await program.createComment(authorPubkey, postId, commentIndex, commentText.trim(), session);
+      try {
+        await program.createComment(authorPubkey, postId, commentIndex, commentText.trim(), session);
+      } catch (firstErr: any) {
+        const msg = firstErr?.message || "";
+        // If session key ran out of SOL, retry without session (wallet signs directly)
+        if (session && (msg.includes("insufficient") || msg.includes("0x1") || msg.includes("custom program error"))) {
+          console.warn("🔑 Session key may be exhausted, retrying without session...");
+          toast("privacy", "Session low on SOL", "Retrying with wallet signature...");
+          await program.createComment(authorPubkey, postId, commentIndex, commentText.trim(), undefined);
+        } else {
+          throw firstErr;
+        }
+      }
       setCommentText("");
       toast("success", "Comment posted! 💬", "Your comment is on-chain — everyone can see it");
       onCommentAdded();
@@ -156,6 +189,8 @@ function OnChainPostCard({
       console.error("Comment error:", err);
       if (err?.message?.includes("User rejected") || err?.message?.includes("rejected the request")) {
         toast("error", "Comment cancelled", "You rejected the transaction");
+      } else if (err?.message?.includes("insufficient") || err?.message?.includes("0x1")) {
+        toast("error", "Insufficient SOL", "Your session key or wallet needs more SOL. Fund your wallet and try again.");
       } else {
         toast("error", "Comment failed", err?.message?.slice(0, 80) || "Please try again");
       }
@@ -170,7 +205,17 @@ function OnChainPostCard({
       const authorPubkey = new PublicKey(post.author);
       const postId = Number(post.postId);
       const session = await getSessionOpts();
-      await program.reactToPost(authorPubkey, postId, reactionType, session);
+      try {
+        await program.reactToPost(authorPubkey, postId, reactionType, session);
+      } catch (firstErr: any) {
+        const msg = firstErr?.message || "";
+        if (session && (msg.includes("insufficient") || msg.includes("0x1") || msg.includes("custom program error"))) {
+          console.warn("🔑 Session key may be exhausted, retrying without session...");
+          await program.reactToPost(authorPubkey, postId, reactionType, undefined);
+        } else {
+          throw firstErr;
+        }
+      }
       setShowReactions(false);
       toast("success", `Reacted ${REACTIONS[reactionType].emoji}`, "Your reaction is on-chain!");
       onReactionAdded();
@@ -178,6 +223,8 @@ function OnChainPostCard({
       console.error("Reaction error:", err);
       if (err?.message?.includes("User rejected") || err?.message?.includes("rejected the request")) {
         toast("error", "Reaction cancelled", "You rejected the transaction");
+      } else if (err?.message?.includes("insufficient") || err?.message?.includes("0x1")) {
+        toast("error", "Insufficient SOL", "Your wallet needs more SOL to react.");
       } else {
         toast("error", "Reaction failed", err?.message?.slice(0, 80) || "Please try again");
       }
@@ -203,6 +250,7 @@ function OnChainPostCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <span className="font-semibold text-[#1A1A2E] text-sm truncate">{displayName}</span>
+            <BadgeCheck className={`w-3.5 h-3.5 flex-shrink-0 ${GOLD_BADGE_USERNAMES.includes(realUsername.toLowerCase()) ? "text-[#F59E0B]" : "text-[#2563EB]"}`} />
             <span className="text-xs text-[#94A3B8] truncate">@{username}</span>
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
@@ -223,7 +271,43 @@ function OnChainPostCard({
 
       {/* Content */}
       <div className="mb-3 pl-0 sm:pl-14">
-        <RichContent content={post.content} />
+        {(() => {
+          // New format: RT|@author|content
+          if (post.content.startsWith("RT|")) {
+            const parts = post.content.split("|");
+            const rtAuthor = parts[1] || "";
+            const rtContent = parts.slice(2).join("|");
+            return (
+              <div>
+                <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] mb-2">
+                  <Repeat2 className="w-3.5 h-3.5" />
+                  <span>Reposted from <span className="font-semibold text-[#1A1A2E]">{rtAuthor}</span></span>
+                </div>
+                <div className="border border-[#E2E8F0] rounded-xl px-4 py-3 bg-[#F8FAFC]">
+                  <RichContent content={rtContent} />
+                </div>
+              </div>
+            );
+          }
+          // Legacy format: 🔁 Repost from @user:\n\n"content"
+          const legacyMatch = post.content.match(/^\u{1F501}\s*Repost from (@\w+):\s*[\\n]*\s*"?([\s\S]*?)"?\s*$/u);
+          if (legacyMatch) {
+            const rtAuthor = legacyMatch[1];
+            const rtContent = legacyMatch[2].replace(/\\n/g, '').replace(/^"|"$/g, '').trim();
+            return (
+              <div>
+                <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] mb-2">
+                  <Repeat2 className="w-3.5 h-3.5" />
+                  <span>Reposted from <span className="font-semibold text-[#1A1A2E]">{rtAuthor}</span></span>
+                </div>
+                <div className="border border-[#E2E8F0] rounded-xl px-4 py-3 bg-[#F8FAFC]">
+                  <RichContent content={rtContent} />
+                </div>
+              </div>
+            );
+          }
+          return <RichContent content={post.content} />;
+        })()}
       </div>
 
       {/* Reaction pills (show aggregated reactions) */}
@@ -317,7 +401,46 @@ function OnChainPostCard({
           )}
         </div>
 
-        <button className="touch-active flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#16A34A] hover:bg-[#F0FDF4] active:bg-[#F0FDF4] transition-all">
+        {/* Repost */}
+        <button
+          disabled={reposting || !isConnected}
+          onClick={async () => {
+            if (reposting || !program || !walletKey) return;
+            setReposting(true);
+            try {
+              const authorName = profile?.username ? `@${profile.username}` : post.author.slice(0, 8);
+              const preview = post.content.length > 200 ? post.content.slice(0, 200) + "..." : post.content;
+              const repostContent = `RT|${authorName}|${preview}`;
+              onRepost(repostContent);
+              toast("success", "Reposted! 🔁", "Creating on-chain repost...");
+            } catch (err: any) {
+              toast("error", "Repost failed", err?.message?.slice(0, 80) || "Try again");
+            }
+            setReposting(false);
+          }}
+          className="touch-active flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#16A34A] hover:bg-[#F0FDF4] active:bg-[#F0FDF4] transition-all disabled:opacity-40"
+        >
+          <Repeat2 className="w-4 h-4" />
+        </button>
+
+        {/* Share */}
+        <button
+          onClick={async () => {
+            const authorName = profile?.username ? `@${profile.username}` : post.author.slice(0, 8);
+            const preview = post.content.length > 80 ? post.content.slice(0, 80) + "..." : post.content;
+            const shareUrl = `https://www.shyft.lol`;
+            const shareText = `"${preview}" — ${authorName} on Shyft\n\n${shareUrl}`;
+            if (navigator.share) {
+              try {
+                await navigator.share({ title: `${authorName} on Shyft`, text: `"${preview}"`, url: shareUrl });
+              } catch {}
+            } else {
+              await navigator.clipboard.writeText(shareText);
+              toast("success", "Link copied! 🔗", "Share it with your friends");
+            }
+          }}
+          className="touch-active flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#2563EB] hover:bg-[#EBF4FF] active:bg-[#EBF4FF] transition-all"
+        >
           <Share2 className="w-4 h-4" />
         </button>
         <a
@@ -453,31 +576,36 @@ export default function Feed() {
     fetchOnchainPosts();
   }, [program, publicKey]);
 
-  // Auto-refresh interactions every 15s so other users see new comments/reactions
+  // Auto-refresh feed every 8s — posts (like counts), comments, reactions
   useEffect(() => {
     if (!program || !publicKey) return;
     const interval = setInterval(() => {
-      refreshInteractions();
-    }, 15_000);
+      refreshFeed();
+    }, 8_000);
     return () => clearInterval(interval);
   }, [program, publicKey]);
 
-  // Light refresh: just comments + reactions (no full post re-fetch)
-  const refreshInteractions = async () => {
+  // Refresh posts + comments + reactions (updates like counts, new posts, etc.)
+  const refreshFeed = async () => {
     if (!program) return;
     try {
-      // Force clear cache so we get fresh data
       clearRpcCache();
-      const [comments, reactions] = await Promise.all([
+      const [allMapped, comments, reactions] = await Promise.all([
+        program.getAllPostsIncludingDelegated(),
         program.getAllComments(),
         program.getAllReactions(),
       ]);
       setAllComments(comments);
       setAllReactions(reactions);
+      const publicPosts = allMapped.filter((p: any) => !p.isPrivate);
+      setOnchainPosts(publicPosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
     } catch (err) {
-      console.error("Failed to refresh interactions:", err);
+      console.error("Failed to refresh feed:", err);
     }
   };
+
+  // Legacy alias for components that call refreshInteractions
+  const refreshInteractions = refreshFeed;
 
   const handlePost = async () => {
     if ((!newPost.trim() && !imageFile) || posting) return;
@@ -539,7 +667,20 @@ export default function Feed() {
         }
       }
 
-      const sig = await program.createPost(postId, content, false, session);
+      let sig: string;
+      try {
+        sig = await program.createPost(postId, content, false, session);
+      } catch (firstErr: any) {
+        const msg = firstErr?.message || "";
+        // If session key ran out of SOL for rent, retry without session (wallet signs directly)
+        if (session && (msg.includes("insufficient") || msg.includes("0x1") || msg.includes("custom program error"))) {
+          console.warn("🔑 Session key may be exhausted for post, retrying without session...");
+          toast("privacy", "Session low on SOL", "Retrying with wallet signature...");
+          sig = await program.createPost(postId, content, false, undefined);
+        } else {
+          throw firstErr;
+        }
+      }
       toast("success", session ? "Post confirmed (no wallet popup!) 🔑" : "Post confirmed on Solana", `TX: ${sig.slice(0, 8)}...`);
 
       setTimeout(() => fetchOnchainPosts(), 1500);
@@ -555,8 +696,8 @@ export default function Feed() {
         toast("error", "Profile required", errorMsg);
       } else if (errorMsg.includes("Provided seeds")) {
         toast("error", "Account error", "Account setup issue - make sure your profile is created and try again");
-      } else if (errorMsg.includes("insufficient funds")) {
-        toast("error", "Insufficient SOL", "You need SOL to pay for the transaction");
+      } else if (errorMsg.includes("insufficient funds") || errorMsg.includes("insufficient") || errorMsg.includes("for rent")) {
+        toast("error", "Insufficient SOL", "Your wallet needs more SOL to pay for this transaction. Fund your wallet from the Profile tab.");
       } else if (errorMsg.includes("simulation failed")) {
         toast("error", "Transaction failed", errorMsg.includes("Provided seeds") ? "PDA derivation issue - reconnect wallet" : "Please try again or check your wallet connection");
       } else {
@@ -709,6 +850,28 @@ export default function Feed() {
                 profileMap={profileMap}
                 onCommentAdded={refreshInteractions}
                 onReactionAdded={refreshInteractions}
+                onRepost={async (content: string) => {
+                  if (!program || !publicKey) return;
+                  const postId = Date.now();
+                  try {
+                    let session: SessionOpts | undefined;
+                    if (sessionState.isActive && sessionState.sessionKeypair && sessionState.sessionTokenPda) {
+                      session = { sessionKeypair: sessionState.sessionKeypair, sessionTokenPda: sessionState.sessionTokenPda, authority: publicKey };
+                    }
+                    try {
+                      await program.createPost(postId, content, false, session);
+                    } catch (e: any) {
+                      const msg = e?.message || "";
+                      if (session && (msg.includes("insufficient") || msg.includes("0x1") || msg.includes("custom program error"))) {
+                        await program.createPost(postId, content, false, undefined);
+                      } else throw e;
+                    }
+                    toast("success", "Repost published! 🔁", "On-chain");
+                    setTimeout(() => fetchOnchainPosts(), 1500);
+                  } catch (err: any) {
+                    toast("error", "Repost failed", err?.message?.slice(0, 80) || "Try again");
+                  }
+                }}
                 sessionState={sessionState}
               />
             );

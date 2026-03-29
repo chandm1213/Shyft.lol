@@ -3,6 +3,23 @@ import { persist } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 import type { Post, ChatConversation, ChatMessage, Payment, UserProfile } from "@/types";
 
+/* ───────── Notification Types ───────── */
+export interface AppNotification {
+  id: string;
+  type: "like" | "comment" | "repost" | "follow" | "reaction";
+  /** Who triggered it */
+  actorAddress: string;
+  actorName: string;
+  /** The post involved (if any) */
+  postKey?: string;
+  postPreview?: string;
+  /** Extra info */
+  reactionEmoji?: string;
+  commentText?: string;
+  timestamp: number;
+  read: boolean;
+}
+
 interface AppState {
   // User
   currentUser: UserProfile | null;
@@ -42,6 +59,17 @@ interface AppState {
   // Active chat
   activeChatId: string | null;
   setActiveChatId: (id: string | null) => void;
+
+  // Notifications
+  notifications: AppNotification[];
+  addNotification: (n: AppNotification) => void;
+  addNotifications: (ns: AppNotification[]) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  unreadNotificationCount: () => number;
+  /** Set of on-chain keys we've already generated notifications for */
+  seenNotificationKeys: string[];
+  addSeenNotificationKeys: (keys: string[]) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -186,6 +214,31 @@ export const useAppStore = create<AppState>()(
 
   activeChatId: null,
   setActiveChatId: (id) => set({ activeChatId: id }),
+
+  // Notifications
+  notifications: [],
+  addNotification: (n) => set((state) => {
+    const merged = [n, ...state.notifications];
+    merged.sort((a, b) => b.timestamp - a.timestamp);
+    return { notifications: merged.slice(0, 100) };
+  }),
+  addNotifications: (ns) => set((state) => {
+    const merged = [...ns, ...state.notifications];
+    // Sort newest first by timestamp
+    merged.sort((a, b) => b.timestamp - a.timestamp);
+    return { notifications: merged.slice(0, 100) };
+  }),
+  markNotificationRead: (id) => set((state) => ({
+    notifications: state.notifications.map((n) => n.id === id ? { ...n, read: true } : n),
+  })),
+  markAllNotificationsRead: () => set((state) => ({
+    notifications: state.notifications.map((n) => ({ ...n, read: true })),
+  })),
+  unreadNotificationCount: () => get().notifications.filter((n) => !n.read).length,
+  seenNotificationKeys: [],
+  addSeenNotificationKeys: (keys) => set((state) => ({
+    seenNotificationKeys: [...new Set([...state.seenNotificationKeys, ...keys])].slice(-2000),
+  })),
     }),
     {
       name: "shadowspace-storage",
@@ -196,6 +249,8 @@ export const useAppStore = create<AppState>()(
         payments: state.payments,
         onChainComments: state.onChainComments,
         likedPosts: state.likedPosts,
+        notifications: state.notifications,
+        seenNotificationKeys: state.seenNotificationKeys,
       }),
     }
   )

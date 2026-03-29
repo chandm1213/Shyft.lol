@@ -498,7 +498,7 @@ export default function CreatorDashboard() {
             </div>
           </div>
           <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <AreaChart data={analytics.engagementTimeline}>
                 <defs>
                   <linearGradient id="likesGrad" x1="0" y1="0" x2="0" y2="1">
@@ -541,7 +541,7 @@ export default function CreatorDashboard() {
             </span>
           </div>
           <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={analytics.earningsTimeline}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                 <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
@@ -574,7 +574,7 @@ export default function CreatorDashboard() {
           {analytics.typeBreakdown.length > 0 ? (
             <>
               <div className="h-40 flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <PieChart>
                     <Pie
                       data={analytics.typeBreakdown}
@@ -633,7 +633,7 @@ export default function CreatorDashboard() {
             </div>
           </div>
           <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={analytics.dayActivity}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />

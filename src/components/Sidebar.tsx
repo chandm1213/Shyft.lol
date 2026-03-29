@@ -61,8 +61,8 @@ export default function Sidebar() {
         <div className="flex items-center gap-3 px-4 py-3 bg-[#F0FDF4] rounded-xl">
           <div className="w-2.5 h-2.5 rounded-full bg-[#16A34A] animate-pulse-green" />
           <div>
-            <p className="text-xs font-semibold text-[#15803D]">Private Mode Active</p>
-            <p className="text-[10px] text-[#16A34A]">TEE Encrypted</p>
+            <p className="text-xs font-semibold text-[#15803D]">On-Chain Social</p>
+            <p className="text-[10px] text-[#16A34A]">Solana Devnet</p>
           </div>
           <Lock className="w-3.5 h-3.5 text-[#16A34A] ml-auto" />
         </div>

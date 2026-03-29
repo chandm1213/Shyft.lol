@@ -215,7 +215,7 @@ export function useSessionKey(): SessionKeyState {
           } else {
             clearSession();
           }
-        } else if (balance < 4_000_000) {
+        } else if (balance < 2_000_000) {
           console.log("🔑 Session key balance low:", balance, "lamports — refunding & ending session");
           refundAndClear(balance);
         } else {
@@ -245,7 +245,7 @@ export function useSessionKey(): SessionKeyState {
       const validUntil = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
       // topUp=true tells the program to transfer lamports from authority to ephemeral key
-      // 15_000_000 lamports (0.015 SOL) — small deposit, session runs until balance depletes
+      // 50_000_000 lamports (0.05 SOL) — enough for ~20 comments/reactions before needing refill
       const createIx = new TransactionInstruction({
         programId: SESSION_KEYS_PROGRAM_ID,
         keys: [
@@ -255,7 +255,7 @@ export function useSessionKey(): SessionKeyState {
           { pubkey: TARGET_PROGRAM_ID, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
-        data: Buffer.from(encodeCreateSessionData(true, validUntil, 15_000_000)),
+        data: Buffer.from(encodeCreateSessionData(true, validUntil, 50_000_000)),
       });
 
       const tx = new Transaction().add(createIx);

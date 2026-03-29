@@ -1,10 +1,10 @@
-# Shyft — Private Social on Solana with MagicBlock TEE
+# Shyft — On-Chain Social Platform on Solana
 
 > **Live:** [https://www.shyft.lol](https://www.shyft.lol)  
 > **Program ID:** `EEnouVLAoQGMEbrypEhP3Ct5RgCViCWG4n1nCZNwMxjQ`  
 > **Network:** Solana Devnet
 
-Shyft is a privacy-first social platform built on Solana where posts, messages, and payment records are protected using **MagicBlock's Trusted Execution Environment (TEE)** and the **Ephemeral Rollups SDK**. Users can create profiles, share posts (public or private), chat with friends, and send SOL payments — all with on-chain privacy guarantees enforced at the hardware level.
+Shyft is the first fully on-chain social platform built on Solana. Every post, comment, like, reaction, follow, repost, and chat message is a Solana transaction — stored permanently on-chain. Users sign in with Privy embedded wallets (email/social login), interact gaslessly via session keys, and receive real-time notifications for all social activity.
 
 ---
 
@@ -12,7 +12,10 @@ Shyft is a privacy-first social platform built on Solana where posts, messages, 
 
 - [Features](#features)
 - [Architecture](#architecture)
-- [MagicBlock Integration — Where & How](#magicblock-integration--where--how)
+- [On-Chain Data](#on-chain-data)
+- [Session Keys (Gasless UX)](#session-keys-gasless-ux)
+- [Real-Time Notifications](#real-time-notifications)
+- [MagicBlock Integration — TEE Privacy](#magicblock-integration--tee-privacy)
 - [On-Chain Program (Rust/Anchor)](#on-chain-program-rustanchor)
 - [Frontend (Next.js)](#frontend-nextjs)
 - [Project Structure](#project-structure)
@@ -24,14 +27,23 @@ Shyft is a privacy-first social platform built on Solana where posts, messages, 
 
 ## Features
 
-| Feature | Description | MagicBlock Used? |
-|---------|-------------|:----------------:|
-| **User Profiles** | On-chain profile with username, display name, bio | ✅ Privacy toggle via permission |
-| **Feed (Posts)** | Public and private posts, likes | ✅ Post delegation + permission |
-| **Friends** | On-chain friend list, mutual friend detection | — |
-| **Private Chat** | 1:1 encrypted messaging between friends | ✅ Permission + message delegation |
-| **In-Chat Payments** | Send SOL to friends directly from chat | ✅ Payment message delegation |
-| **Payment Records** | On-chain payment history with TEE protection | ✅ Message PDA delegation |
+| Feature | Description | On-Chain? |
+|---------|-------------|:---------:|
+| **User Profiles** | Username, display name, bio, avatar, banner — stored on Solana | ✅ |
+| **Posts** | Create text posts with images, GIFs, links — stored on Solana | ✅ |
+| **Comments** | Comment on any post — each comment is a separate PDA | ✅ |
+| **Likes** | Like any post — increments an on-chain counter | ✅ |
+| **Reactions** | React with ❤️ 🔥 🚀 😂 👏 💡 — each reaction is a PDA | ✅ |
+| **Reposts** | Repost anyone's content — creates a new on-chain post with `RT\|@author\|content` | ✅ |
+| **Follows** | Follow/unfollow users — on-chain follow accounts | ✅ |
+| **Chat** | 1:1 encrypted messaging between users | ✅ |
+| **In-Chat Payments** | Send SOL to friends directly from chat | ✅ |
+| **Session Keys** | Gasless interactions — no wallet popup after initial session creation | ✅ |
+| **Real-Time Notifications** | Bell icon with live alerts for likes, comments, reactions, reposts, follows | Polling |
+| **Wallet Management** | View balance, QR code, export private key, fund via explorer | — |
+| **Gold Badges** | OG/founder verification badges on profiles and posts | — |
+| **Image Uploads** | Upload images directly in posts via ImgBB hosting | — |
+| **Rich Content** | Auto-detect URLs, images, YouTube embeds, GIFs in posts | — |
 
 ---
 
@@ -39,21 +51,34 @@ Shyft is a privacy-first social platform built on Solana where posts, messages, 
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        Frontend (Next.js)                        │
-│  shyft.lol — React, TailwindCSS, Solana Wallet Adapter          │
+│                     Frontend (Next.js 16)                         │
+│              shyft.lol — React 19, TailwindCSS 4                 │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌────────┐  │
-│  │    Feed      │  │    Chat     │  │  Payments   │  │Profile │  │
-│  │  (Posts)     │  │ (Messages)  │  │ (SOL xfer)  │  │(Setup) │  │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └───┬────┘  │
-│         │                │                │              │       │
-│         ▼                ▼                ▼              ▼       │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ ┌────────┐  │
+│  │  Feed    │ │  Chat    │ │ Payments │ │ Profile │ │ Notifs │  │
+│  │ Posts    │ │ Messages │ │ SOL xfer │ │ Setup   │ │ Bell   │  │
+│  │ Comments │ │          │ │          │ │ Wallet  │ │ Panel  │  │
+│  │ Reactions│ │          │ │          │ │ Export  │ │        │  │
+│  │ Reposts  │ │          │ │          │ │         │ │        │  │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬────┘ └───┬────┘  │
+│       │            │            │             │          │       │
+│       ▼            ▼            ▼             ▼          ▼       │
 │  ┌──────────────────────────────────────────────────────────┐    │
-│  │              ShyftClient (src/lib/program.ts)            │    │
-│  │  Anchor RPC calls + MagicBlock permission/delegation     │    │
+│  │           ShyftClient (src/lib/program.ts)               │    │
+│  │    Anchor RPC · Session Keys · MagicBlock TEE · Cache    │    │
 │  └────────────────────────┬─────────────────────────────────┘    │
 │                           │                                      │
+│  ┌────────────────────────┼─────────────────────────────────┐    │
+│  │         Session Key Manager (useSessionKey.ts)           │    │
+│  │  Auto-create · 0.05 SOL deposit · 7-day validity         │    │
+│  │  Auto-revoke at 2M lamports · Retry-without-session      │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │        Privy Embedded Wallets (@privy-io/react-auth)     │    │
+│  │  Email/Social login · Solana wallet · Export private key  │    │
+│  └──────────────────────────────────────────────────────────┘    │
 └───────────────────────────┼──────────────────────────────────────┘
                             │
                             ▼
@@ -65,10 +90,18 @@ Shyft is a privacy-first social platform built on Solana where posts, messages, 
 │  │  EEnouVLAoQGMEbrypEhP3Ct5RgCViCWG4n1nCZNwMxjQ          │    │
 │  │                                                          │    │
 │  │  Instructions:                                           │    │
-│  │  • create_profile    • create_post    • like_post        │    │
+│  │  • create_profile    • update_profile    • follow_user   │    │
+│  │  • create_post       • like_post         • unfollow_user │    │
+│  │  • create_comment    • react_to_post                     │    │
 │  │  • create_chat       • send_message                      │    │
-│  │  • create_friend_list • add_friend   • remove_friend     │    │
+│  │  • create_conversation • send_conversation_message       │    │
 │  │  • delegate_pda      • create_permission • undelegate    │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │          Session Token Program (gari-network)            │    │
+│  │  Ephemeral keypairs sign TXs without wallet popups       │    │
+│  │  #[session_auth_or] macro on all interaction instructions │    │
 │  └──────────────────────────────────────────────────────────┘    │
 │                                                                  │
 │  ┌─────────────────────┐  ┌──────────────────────────────────┐   │
@@ -80,218 +113,168 @@ Shyft is a privacy-first social platform built on Solana where posts, messages, 
 │  ┌──────────────────────────────────────────────────────────┐    │
 │  │              MagicBlock TEE Validator                     │    │
 │  │  FnE6VJT5QNZdedZPnCoLsARgBwoE6DeJNjBs2H1gySXA          │    │
-│  │  Intel TDX hardware-level privacy                        │    │
+│  │  Intel TDX hardware-level privacy for delegated accounts  │    │
 │  └──────────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## MagicBlock Integration — Where & How
+## On-Chain Data
 
-MagicBlock is used throughout the application for **privacy and access control**. Here is every integration point:
+Everything on Shyft is stored as Solana program accounts. Here's what's currently live on devnet:
 
-### 1. Ephemeral Rollups SDK (Rust Program)
+| Account Type | Count | Rent Each | Description |
+|-------------|------:|-----------|-------------|
+| **Posts** | 8+ | 0.002763 SOL | Text content, like counter, author, timestamp |
+| **Comments** | 23+ | 0.002227 SOL | Comment text, author, linked post, timestamp |
+| **Reactions** | 12+ | 0.001399 SOL | Emoji reaction type, user, linked post |
+| **Profiles** | 2+ | 0.003083 SOL | Username, display name, bio, avatar URL, banner URL |
+| **Follows** | 2+ | 0.001392 SOL | Follower → following relationship |
+| **Conversations** | 1+ | 0.052256 SOL | Chat messages between two participants |
+| **Total** | **48+** | | **~0.151 SOL total rent** |
 
-**File:** `programs/shadowspace/src/lib.rs`
+Every interaction is a signed Solana transaction. Nothing is stored in a database.
 
-The Solana program uses the `ephemeral-rollups-sdk` (v0.8.0) with both `anchor` and `access-control` features:
+---
+
+## Session Keys (Gasless UX)
+
+Shyft uses the **gari-network session-keys program** to eliminate wallet popups after initial setup:
+
+1. **User connects** via Privy (email, Google, etc.) → embedded Solana wallet created
+2. **First interaction** auto-creates a session: user signs once, deposits 0.05 SOL
+3. **All subsequent interactions** (posts, comments, likes, reactions) are signed by an ephemeral keypair — **no wallet popup**
+4. **Session expires** after 7 days or when balance drops below 2M lamports
+5. **Automatic fallback**: if session key runs out of SOL, the app retries with a direct wallet signature
+
+The `#[session_auth_or]` macro is applied to every interaction instruction in the Anchor program:
 
 ```rust
-use ephemeral_rollups_sdk::access_control::instructions::{
-    CreatePermissionCpiBuilder, UpdatePermissionCpiBuilder,
-};
-use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
-use ephemeral_rollups_sdk::cpi::DelegateConfig;
-use ephemeral_rollups_sdk::ephem::commit_and_undelegate_accounts;
+#[session_auth_or(
+    ctx.accounts.author.key() == ctx.accounts.author.key(),
+    ShadowError::Unauthorized
+)]
+pub fn create_post(...) -> Result<()> { ... }
+pub fn create_comment(...) -> Result<()> { ... }
+pub fn like_post(...) -> Result<()> { ... }
+pub fn react_to_post(...) -> Result<()> { ... }
 ```
 
-**Key program instructions that use MagicBlock:**
+---
+
+## Real-Time Notifications
+
+The notification system polls on-chain data every **20 seconds** and diffs against previously seen keys to detect new activity:
+
+| Notification | Trigger | Example |
+|-------------|---------|---------|
+| ❤️ **Like** | Someone likes your post | "2 people liked your post" |
+| 💬 **Comment** | Someone comments on your post | "@lmao commented: 'hahah'" |
+| 🔥 **Reaction** | Someone reacts to your post | "@lmao reacted �� to your post" |
+| 🔁 **Repost** | Someone reposts your content | "@shaan reposted your post" |
+| �� **Follow** | Someone follows you | "@lmao started following you" |
+
+**Self-interaction filtering:** You never receive notifications for your own likes, comments, reactions, or reposts on your own posts.
+
+Notifications are displayed via a **bell icon** in the header with an unread badge. The notification panel shows actor names (resolved from on-chain profiles), post previews, timestamps, and a "Mark all read" button. State is persisted in localStorage.
+
+---
+
+## MagicBlock Integration — TEE Privacy
+
+MagicBlock is used for **privacy and access control** via the Ephemeral Rollups SDK:
+
+### TEE Delegation Flow
+
+```
+User creates account → Permission created (access control) → PDA delegated to TEE (Intel TDX)
+```
+
+### Integration Points
 
 | Instruction | What it does | MagicBlock Feature |
 |-------------|-------------|-------------------|
-| `create_permission` | Creates a permission on any PDA, restricting who can read/write it inside the TEE. Uses `CreatePermissionCpiBuilder` to CPI into MagicBlock's Permission Program. | **Access Control** |
-| `delegate_pda` | Delegates any PDA to the MagicBlock TEE validator. The account's owner changes to the Delegation Program, and data lives inside Intel TDX hardware. | **TEE Delegation** |
-| `update_profile_privacy` | Toggles profile privacy using `UpdatePermissionCpiBuilder`. When private, only the owner's pubkey is in the members list. | **Access Control** |
-| `undelegate` | Commits state and undelegates accounts back to Solana using `commit_and_undelegate_accounts`. | **Commit & Undelegate** |
+| `create_permission` | Restricts who can read/write a PDA inside TEE | **Access Control** |
+| `delegate_pda` | Moves PDA data into Intel TDX hardware | **TEE Delegation** |
+| `update_profile_privacy` | Toggles profile visibility via permission update | **Access Control** |
+| `undelegate` | Commits state and moves account back to Solana | **Commit & Undelegate** |
 
-The `#[ephemeral]` macro is applied to the entire program module, enabling MagicBlock's ephemeral rollup functionality.
-
-### 2. Post Delegation (Feed)
-
-**Files:** `src/components/Feed.tsx`, `src/lib/program.ts`
-
-When a user creates a post:
-
-1. **Post PDA created** on-chain via `create_post`
-2. **MagicBlock permission created** on the post PDA — restricts read access to friends (for private posts) or public
-3. **Post PDA delegated to TEE** via `delegate_pda` — the post data moves into the MagicBlock TEE validator
-
-```
-User creates post → Permission created → PDA delegated to TEE
-```
-
-The feed loads both regular posts (from our program) and delegated posts (from the Delegation Program at `DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh`), then decodes and merges them. Delegated posts show a purple "TEE" badge.
-
-**Relevant code in `program.ts`:**
-- `createPostFull()` — Creates post + permission + delegates to TEE
-- `getAllPostsIncludingDelegated()` — Fetches posts from both our program and the delegation program, decodes with BorshCoder
-
-### 3. Chat Permission & Message Delegation
-
-**Files:** `src/components/Chat.tsx`, `src/lib/program.ts`
-
-When a user opens a chat with a friend:
-
-1. **Chat PDA created** on-chain via `create_chat`
-2. **MagicBlock permission created** on the chat PDA — restricts access to only the two chat participants (both get `AUTHORITY | TX_LOGS | TX_BALANCES` flags = 7)
-
-When a message is sent:
-
-3. **Message PDA created** on-chain via `send_message`
-4. **MagicBlock permission created** on the message PDA — same two-participant restriction
-5. **Message PDA delegated to TEE** via `delegate_pda` — the message data moves into Intel TDX hardware
-
-```
-Create chat → Permission (2 members) → Send message → Permission on msg → Delegate msg to TEE
-```
-
-**Design decision:** The chat PDA itself is NOT delegated — only permissioned. This is because the `send_message` instruction needs to write to the chat PDA (incrementing `message_count`), and a delegated account's owner changes to the Delegation Program, which would cause Anchor to reject the write. Instead, each **individual message** is delegated to TEE independently.
-
-**Relevant code in `program.ts`:**
-- `sendMessage()` — Sends message on-chain, then creates permission + delegates message PDA to TEE
-- `createPermission()` — CPI wrapper for MagicBlock's permission program
-- `delegateAccount()` — CPI wrapper for MagicBlock's delegation program
-- `getMessagesForChat()` — Fetches messages from both our program and delegated accounts (589 bytes), decodes with BorshCoder
-
-### 4. In-Chat Payments
-
-**Files:** `src/components/Chat.tsx`, `src/hooks/usePrivatePayment.ts`, `src/lib/program.ts`
-
-When a user sends SOL to a friend from chat:
-
-1. **SOL transferred** directly via `SystemProgram.transfer` on Solana
-2. **Payment message recorded** on-chain via `send_message` with `is_payment: true`
-3. **Payment message PDA delegated to TEE** — the record of who sent how much to whom is protected inside the TEE
-
-The payment record (message PDA) goes through the same MagicBlock permission + delegation flow as regular messages, so the payment details are only visible to the two chat participants.
-
-### 5. Profile Privacy
-
-**File:** `programs/shadowspace/src/lib.rs`
-
-The `update_profile_privacy` instruction uses MagicBlock's `UpdatePermissionCpiBuilder` to toggle profile visibility:
-
-- **Private mode:** Updates permission members to only include the owner's pubkey
-- **Public mode:** Sets members to `None` (publicly readable)
-
-### 6. Delegated Account Fetching
-
-**File:** `src/lib/program.ts`
-
-The client intelligently fetches data from both the main program and the MagicBlock Delegation Program:
-
-- **Posts (589 bytes):** `getProgramAccounts(DELEGATION_PROGRAM_ID, { filters: [{ dataSize: 589 }] })` — fetches all delegated 589-byte accounts, then tries to decode as `Post`
-- **Messages (589 bytes):** Same filter, but decoded as `Message` and filtered by `chatId`
-- **Chats (96 bytes):** For each friend, derives the expected chat PDA and checks if it exists in the delegation program via `getAccountInfo`
-
-All delegated accounts are decoded using Anchor's `BorshCoder` with the program's IDL.
-
-### Summary of MagicBlock Programs Used
+### Programs Used
 
 | Program | Address | Purpose |
 |---------|---------|---------|
-| **Permission Program** | `ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1` | Access control — restricts who can read/write PDAs |
-| **Delegation Program** | `DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh` | Delegates PDAs to TEE validator |
-| **Magic Program** | `Magic11111111111111111111111111111111111111` | Core MagicBlock system program |
-| **Magic Context** | `MagicContext1111111111111111111111111111111` | Ephemeral context for commit/undelegate |
+| **Permission Program** | `ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1` | Access control on PDAs |
+| **Delegation Program** | `DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh` | Delegate PDAs to TEE |
 | **TEE Validator** | `FnE6VJT5QNZdedZPnCoLsARgBwoE6DeJNjBs2H1gySXA` | Intel TDX hardware validator |
 
 ---
 
 ## On-Chain Program (Rust/Anchor)
 
-**Location:** `programs/shadowspace/src/lib.rs`
+**Location:** `programs/shadowspace/src/lib.rs` (~1092 lines)
 
 ### Account Types (PDAs)
 
-| Account | Seeds | Size | Description |
-|---------|-------|------|-------------|
-| **Profile** | `["profile", user_pubkey]` | 417 bytes | User profile with username, bio, privacy |
-| **Post** | `["post", author_pubkey, post_id_le]` | 589 bytes | Post with content, likes, privacy flag |
-| **Chat** | `["chat", chat_id_le]` | 96 bytes | Chat room between two users |
-| **Message** | `["message", chat_id_le, msg_index_le]` | 589 bytes | Individual chat message |
-| **FriendList** | `["friends", user_pubkey]` | 1636 bytes | List of up to 50 friend pubkeys |
+| Account | Seeds | Description |
+|---------|-------|-------------|
+| **Profile** | `["profile", owner]` | Username, display name, bio, avatar, banner, privacy, counters |
+| **Post** | `["post", author, post_id]` | Content, likes counter, comment count, privacy flag |
+| **Comment** | `["comment", post, author, comment_index]` | Comment text, author, linked post, timestamp |
+| **Reaction** | `["reaction", post, user]` | Reaction type (0-5), user, linked post |
+| **FollowAccount** | `["follow", follower, following]` | Follower → following relationship |
+| **Conversation** | `["conversation", participant1, participant2]` | Chat with message history |
 
 ### Instructions
 
-| Instruction | Description |
-|-------------|-------------|
-| `create_profile` | Initialize profile PDA |
-| `update_profile_privacy` | Toggle privacy with MagicBlock permission |
-| `create_post` | Create a post, increment author's post_count |
-| `like_post` | Increment post's like counter |
-| `create_chat` | Create chat room between two users |
-| `send_message` | Send message, increment chat's message_count |
-| `create_friend_list` | Initialize friend list PDA |
-| `add_friend` | Add pubkey to friend list |
-| `remove_friend` | Remove pubkey from friend list |
-| `create_permission` | Create MagicBlock permission on any PDA |
-| `delegate_pda` | Delegate any PDA to TEE validator |
-| `undelegate` | Commit & undelegate account back to Solana |
-
-### AccountType Enum
-
-Used by `create_permission` and `delegate_pda` to derive the correct PDA seeds:
-
-```rust
-pub enum AccountType {
-    Profile { owner: Pubkey },
-    Post { author: Pubkey, post_id: u64 },
-    Chat { chat_id: u64 },
-    Message { chat_id: u64, message_index: u64 },
-    FriendList { owner: Pubkey },
-}
-```
+| Instruction | Session Key? | Description |
+|-------------|:------------:|-------------|
+| `create_profile` | — | Initialize profile PDA |
+| `update_profile` | — | Update username, bio, avatar, banner |
+| `create_post` | ✅ | Create post, increment author's post count |
+| `create_comment` | ✅ | Comment on a post |
+| `like_post` | ✅ | Increment post's like counter |
+| `react_to_post` | ✅ | Create reaction PDA (one per user per post) |
+| `follow_user` | — | Create follow account |
+| `unfollow_user` | — | Close follow account |
+| `create_conversation` | — | Create chat between two users |
+| `send_conversation_message` | — | Add message to conversation |
+| `create_permission` | — | MagicBlock permission on PDA |
+| `delegate_pda` | — | Delegate PDA to TEE |
+| `undelegate` | — | Commit & undelegate back to Solana |
 
 ---
 
 ## Frontend (Next.js)
 
-### Pages
-
-| Route | Component | Description |
-|-------|-----------|-------------|
-| `/` | `page.tsx` | Main app — shows Landing (pre-connect) or tabbed UI (post-connect) |
-| `/api/magicblock` | `route.ts` | API proxy for MagicBlock endpoints |
-
 ### Core Components
 
 | Component | File | Description |
 |-----------|------|-------------|
-| **Feed** | `src/components/Feed.tsx` | Public + private post feed with TEE badges |
-| **Chat** | `src/components/Chat.tsx` | Friend-based 1:1 messaging with MagicBlock |
-| **Payments** | `src/components/Payments.tsx` | SOL payment UI with status tracking |
-| **Profile** | `src/components/Profile.tsx` | Profile setup and friend management |
-| **ProfileSetup** | `src/components/ProfileSetup.tsx` | First-time profile creation |
-| **Landing** | `src/components/Landing.tsx` | Pre-connect landing page |
-| **OnboardingDemo** | `src/components/OnboardingDemo.tsx` | First-time user walkthrough |
-| **Header** | `src/components/Header.tsx` | App header with wallet connection |
-| **Sidebar** | `src/components/Sidebar.tsx` | Desktop navigation |
-| **MobileNav** | `src/components/MobileNav.tsx` | Mobile bottom navigation |
+| **Feed** | `Feed.tsx` | Post feed with comments, likes, reactions, reposts, share. Rich content rendering. Session key retry fallback. |
+| **Profile** | `Profile.tsx` | Profile page with posts tab, wallet management (balance, QR, export, fund), gold badges, interactive post cards |
+| **Chat** | `Chat.tsx` | 1:1 messaging with TEE-protected messages |
+| **Header** | `Header.tsx` | App header with wallet button + notification bell (unread badge, dropdown panel) |
+| **Friends** | `Friends.tsx` | Follow/unfollow users, discover people |
+| **Payments** | `Payments.tsx` | SOL payment UI |
+| **ProfileSetup** | `ProfileSetup.tsx` | First-time onboarding |
+| **Landing** | `Landing.tsx` | Pre-connect landing page |
+| **Sidebar** | `Sidebar.tsx` | Desktop navigation |
+| **MobileNav** | `MobileNav.tsx` | Mobile bottom navigation |
+| **Toast** | `Toast.tsx` | Toast notification system |
 
 ### Key Libraries
 
 | File | Purpose |
 |------|---------|
-| `src/lib/program.ts` | **ShyftClient** — All Solana + MagicBlock RPC interactions |
-| `src/lib/store.ts` | Zustand global state store |
-| `src/lib/magicblock.ts` | MagicBlock API helpers |
-| `src/lib/constants.ts` | Program IDs, TEE URLs |
-| `src/lib/idl.json` | Anchor IDL for the program |
+| `src/lib/program.ts` | **ShyftClient** (~1785 lines) — All Solana interactions, caching, session key support |
+| `src/lib/store.ts` | Zustand store — notifications, liked posts, seen keys, UI state |
+| `src/hooks/useSessionKey.ts` | Session key lifecycle — create, check, revoke, auto-fund |
+| `src/hooks/useNotifications.ts` | On-chain polling for likes, comments, reactions, reposts, follows |
 | `src/hooks/useProgram.ts` | React hook for ShyftClient |
-| `src/hooks/usePrivatePayment.ts` | SOL payment hook |
-| `src/contexts/WalletProvider.tsx` | Solana wallet adapter setup |
+| `src/hooks/usePrivatePayment.ts` | SOL transfer hook |
+| `src/contexts/WalletProvider.tsx` | Privy + Solana wallet setup |
+| `src/lib/idl.json` | Anchor IDL for the program |
 
 ---
 
@@ -300,51 +283,55 @@ pub enum AccountType {
 ```
 shadowspace/
 ├── programs/shadowspace/
-│   ├── Cargo.toml                 # Rust dependencies (anchor, ephemeral-rollups-sdk)
-│   └── src/lib.rs                 # Solana program — all instructions & accounts
+│   ├── Cargo.toml                 # Rust deps (anchor, ephemeral-rollups-sdk, session-keys)
+│   └── src/lib.rs                 # Solana program (~1092 lines)
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx             # Root layout with WalletProvider
+│   │   ├── layout.tsx             # Root layout with Privy + WalletProvider
 │   │   ├── page.tsx               # Main page with tab routing
 │   │   ├── globals.css            # TailwindCSS styles
-│   │   └── api/magicblock/
-│   │       └── route.ts           # API proxy for MagicBlock
+│   │   └── api/
+│   │       └── magicblock/route.ts # MagicBlock API proxy
 │   ├── components/
-│   │   ├── Feed.tsx               # Post feed (public + private + delegated)
-│   │   ├── Chat.tsx               # 1:1 messaging with friends
-│   │   ├── Payments.tsx           # Payment UI
-│   │   ├── Profile.tsx            # Profile & friend management
-│   │   ├── ProfileSetup.tsx       # Onboarding profile creation
+│   │   ├── Feed.tsx               # Post feed with full interactions
+│   │   ├── Chat.tsx               # 1:1 messaging
+│   │   ├── Payments.tsx           # SOL payments
+│   │   ├── Profile.tsx            # Profile + wallet management
+│   │   ├── ProfileSetup.tsx       # Onboarding
+│   │   ├── Friends.tsx            # Follow/discover
 │   │   ├── Landing.tsx            # Pre-connect landing
-│   │   ├── Header.tsx             # App header
+│   │   ├── Header.tsx             # Header + notification bell
 │   │   ├── Sidebar.tsx            # Desktop nav
 │   │   ├── MobileNav.tsx          # Mobile nav
-│   │   ├── OnboardingDemo.tsx     # First-time walkthrough
-│   │   └── Toast.tsx              # Toast notification system
+│   │   ├── RichContent.tsx        # URL/image/video/YouTube detection
+│   │   ├── Toast.tsx              # Toast notifications
+│   │   ├── CreatorDashboard.tsx   # Analytics dashboard
+│   │   └── OnboardingDemo.tsx     # Walkthrough
 │   ├── contexts/
-│   │   └── WalletProvider.tsx     # Solana wallet adapter
+│   │   └── WalletProvider.tsx     # Privy embedded wallet setup
 │   ├── hooks/
 │   │   ├── useProgram.ts          # ShyftClient hook
+│   │   ├── useSessionKey.ts       # Session key management
+│   │   ├── useNotifications.ts    # On-chain notification polling
 │   │   └── usePrivatePayment.ts   # SOL payment hook
 │   ├── lib/
-│   │   ├── program.ts             # ShyftClient — main program interaction layer
-│   │   ├── store.ts               # Zustand state management
-│   │   ├── magicblock.ts          # MagicBlock API utilities
+│   │   ├── program.ts             # ShyftClient — all Solana RPC interactions
+│   │   ├── store.ts               # Zustand state (notifications, liked posts, etc.)
+│   │   ├── magicblock.ts          # MagicBlock API helpers
 │   │   ├── constants.ts           # Program IDs, URLs
 │   │   └── idl.json               # Anchor IDL
 │   └── types/
-│       └── index.ts               # TypeScript interfaces
+│       ├── index.ts               # TypeScript interfaces
+│       └── shadowspace.ts         # Generated program types
 ├── target/
-│   ├── deploy/
-│   │   └── shadowspace-keypair.json
+│   ├── deploy/shadowspace-keypair.json
 │   ├── idl/shadowspace.json       # Generated IDL
 │   └── types/shadowspace.ts       # Generated types
 ├── Anchor.toml                    # Anchor config (devnet)
 ├── Cargo.toml                     # Workspace Cargo config
 ├── package.json                   # Node.js dependencies
 ├── next.config.ts                 # Next.js configuration
-├── tsconfig.json                  # TypeScript configuration
-└── postcss.config.mjs             # PostCSS/Tailwind config
+└── tsconfig.json                  # TypeScript configuration
 ```
 
 ---
@@ -356,7 +343,6 @@ shadowspace/
 - **Node.js** ≥ 18
 - **Rust** + **Anchor CLI** 0.32.1
 - **Solana CLI** with devnet configured
-- A Solana wallet (Phantom, Solflare, etc.)
 
 ### 1. Clone & Install
 
@@ -382,13 +368,14 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-### 4. Connect Wallet
+### 4. Sign In & Use
 
-1. Switch your wallet to **Solana Devnet**
-2. Get devnet SOL from a faucet: `solana airdrop 2`
-3. Connect your wallet on the landing page
-4. Create your profile
-5. Start posting, adding friends, and chatting!
+1. Click **Sign In** — Privy creates an embedded Solana wallet (email, Google, etc.)
+2. **Create your profile** (username, display name, bio)
+3. **Post** — type something and hit post (stored on Solana!)
+4. **Interact** — like, comment, react, repost other posts
+5. **Follow** people and chat with them
+6. **Check notifications** — bell icon shows real-time activity
 
 ---
 
@@ -400,7 +387,7 @@ Open [http://localhost:3000](http://localhost:3000).
 npx vercel --prod
 ```
 
-The app is deployed at [https://www.shyft.lol](https://www.shyft.lol).
+Live at [https://www.shyft.lol](https://www.shyft.lol).
 
 ### Solana Program
 
@@ -419,26 +406,32 @@ Program ID: `EEnouVLAoQGMEbrypEhP3Ct5RgCViCWG4n1nCZNwMxjQ`
 |-------|-----------|
 | **Blockchain** | Solana (Devnet) |
 | **Smart Contract** | Anchor 0.32.1 (Rust) |
-| **Privacy** | MagicBlock Ephemeral Rollups SDK 0.8.0 |
-| **TEE Hardware** | Intel TDX via MagicBlock |
+| **Session Keys** | gari-network session-keys program |
+| **Privacy/TEE** | MagicBlock Ephemeral Rollups SDK 0.8.0, Intel TDX |
 | **Frontend** | Next.js 16.1.7 (React 19, Turbopack) |
+| **Auth** | Privy `@privy-io/react-auth` ^3.18.0 (embedded Solana wallets) |
 | **Styling** | Tailwind CSS 4.2 |
-| **Wallet** | Solana Wallet Adapter |
-| **State** | Zustand 5.0 |
+| **State** | Zustand 5.0 (persisted) |
 | **Icons** | Lucide React |
+| **Images** | ImgBB API |
 | **Deployment** | Vercel |
+| **RPC** | Helius Devnet |
 
 ---
 
-## How Privacy Works
+## How It Works
 
-1. **Permission-based access control:** Every sensitive PDA (posts, messages, profiles) gets a MagicBlock permission that specifies exactly which pubkeys can read/write the data. This is enforced at the hardware level inside Intel TDX.
+1. **Everything is on-chain.** Posts, comments, likes, reactions, follows, reposts, profiles, and chat messages are all Solana program accounts. Each interaction is a signed transaction.
 
-2. **TEE Delegation:** After creating an account and setting permissions, the PDA is delegated to MagicBlock's TEE validator. The account's owner changes to the Delegation Program, and the actual data lives inside the Trusted Execution Environment — invisible to validators, RPC nodes, or anyone without permission.
+2. **Session keys eliminate friction.** After a one-time session creation (one wallet signature + 0.05 SOL deposit), all interactions are signed by an ephemeral keypair — no more wallet popups. If the session runs low on SOL, the app automatically falls back to direct wallet signing.
 
-3. **Dual fetching:** The frontend fetches data from both the main program (non-delegated accounts) and the Delegation Program (delegated accounts), decodes both with the same IDL, and merges results. Users see a seamless experience with TEE/on-chain badges indicating where their data lives.
+3. **Privy makes onboarding easy.** Users sign in with email, Google, or any social provider. Privy creates an embedded Solana wallet — no browser extension needed. Users can export their private key or view their wallet on Solana Explorer.
 
-4. **Friend-only visibility:** Private posts are only shown to mutual friends. Chat messages are permissioned to only the two participants. Payment records are delegated to TEE so transaction details are hardware-protected.
+4. **Real-time notifications via on-chain polling.** Every 20 seconds, the app fetches all comments, reactions, follows, and posts from the chain, diffs against what it's seen before, and surfaces new activity as notifications. Self-interactions are filtered out.
+
+5. **TEE privacy for sensitive data.** Posts and messages can be delegated to MagicBlock's TEE validator (Intel TDX), where data is hardware-encrypted and only accessible to permissioned pubkeys.
+
+6. **Reposts are on-chain posts.** When you repost someone's content, a new post is created on-chain with the format `RT|@original_author|content`. The feed detects this prefix and renders it as a styled quote card. The original author receives a repost notification.
 
 ---
 
