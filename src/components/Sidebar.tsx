@@ -1,6 +1,6 @@
 "use client";
 
-import { Shield, Newspaper, MessageCircle, Wallet, User, Lock, BarChart3, Users } from "lucide-react";
+import { Shield, Newspaper, MessageCircle, Wallet, User, Lock, BarChart3, Users, Sun, Moon } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 
 const navItems = [
@@ -13,7 +13,7 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-  const { activeTab, setActiveTab, setViewingProfile, conversations } = useAppStore();
+  const { activeTab, setActiveTab, setViewingProfile, conversations, theme, toggleTheme } = useAppStore();
   const totalUnread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
 
   const handleNavClick = (tabId: string) => {
@@ -60,6 +60,20 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Theme Toggle */}
+      <div className="px-4 py-2 border-t border-[#E2E8F0]">
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#1A1A2E] transition-all duration-200"
+        >
+          {theme === "light" ? (
+            <><Moon className="w-5 h-5" /><span>Night Mode</span></>
+          ) : (
+            <><Sun className="w-5 h-5 text-[#F59E0B]" /><span>Day Mode</span></>
+          )}
+        </button>
+      </div>
 
       {/* Privacy status */}
       <div className="px-4 py-4 border-t border-[#E2E8F0]">

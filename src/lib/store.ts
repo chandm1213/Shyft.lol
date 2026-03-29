@@ -62,6 +62,11 @@ interface AppState {
   activeTab: string;
   setActiveTab: (tab: string) => void;
 
+  // Theme
+  theme: "light" | "dark";
+  setTheme: (theme: "light" | "dark") => void;
+  toggleTheme: () => void;
+
   // Active chat
   activeChatId: string | null;
   setActiveChatId: (id: string | null) => void;
@@ -223,6 +228,11 @@ export const useAppStore = create<AppState>()(
   activeTab: "feed",
   setActiveTab: (tab) => set({ activeTab: tab }),
 
+  // Theme
+  theme: "light",
+  setTheme: (theme) => set({ theme }),
+  toggleTheme: () => set((state) => ({ theme: state.theme === "light" ? "dark" : "light" })),
+
   activeChatId: null,
   setActiveChatId: (id) => set({ activeChatId: id }),
 
@@ -262,6 +272,7 @@ export const useAppStore = create<AppState>()(
         likedPosts: state.likedPosts,
         notifications: state.notifications,
         seenNotificationKeys: state.seenNotificationKeys,
+        theme: state.theme,
       }),
     }
   )

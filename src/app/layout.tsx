@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import WalletProvider from "@/contexts/WalletProvider";
+import ThemeProvider from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "Shyft — Private Social on Solana",
@@ -34,7 +35,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning className="antialiased">
         <WalletProvider>
-          {children}
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
         </WalletProvider>
       </body>
     </html>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Shield, LogOut, Wallet, Bell } from "lucide-react";
+import { Shield, LogOut, Wallet, Bell, Sun, Moon } from "lucide-react";
 import { useWallet } from "@/hooks/usePrivyWallet";
 import { useAppStore, AppNotification } from "@/lib/store";
 import { useProgram } from "@/hooks/useProgram";
@@ -27,7 +27,7 @@ const subtitles: Record<string, string> = {
 };
 
 export default function Header() {
-  const { activeTab, setCurrentUser, setConnected, notifications, markAllNotificationsRead, setActiveTab } = useAppStore();
+  const { activeTab, setCurrentUser, setConnected, notifications, markAllNotificationsRead, setActiveTab, theme, toggleTheme } = useAppStore();
   const { publicKey, connected, login, logout, ready } = useWallet();
   const program = useProgram();
   const [showSetup, setShowSetup] = useState(false);
@@ -167,6 +167,19 @@ export default function Header() {
             </div>
           </div>
           <div className="flex-shrink-0 ml-2 flex items-center gap-2">
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] transition-all duration-300"
+              title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            >
+              {theme === "light" ? (
+                <Moon className="w-4 h-4 text-[#64748B]" />
+              ) : (
+                <Sun className="w-4 h-4 text-[#F59E0B]" />
+              )}
+            </button>
+
             {/* Notification Bell */}
             {connected && (
               <div className="relative" ref={notifRef}>

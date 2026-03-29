@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Shield, MessageCircle, Wallet, Lock, Users, ArrowRight, Zap, Eye, EyeOff, ChevronRight, Sparkles } from "lucide-react";
+import { Shield, MessageCircle, Wallet, Lock, Users, ArrowRight, Zap, Eye, EyeOff, ChevronRight, Sparkles, Sun, Moon } from "lucide-react";
 import { useWallet } from "@/hooks/usePrivyWallet";
+import { useAppStore } from "@/lib/store";
 
 const features = [
   {
@@ -61,6 +62,7 @@ export default function Landing() {
   const [activeFeature, setActiveFeature] = useState(0);
   const [showApp, setShowApp] = useState(false);
   const { login, ready } = useWallet();
+  const { theme, toggleTheme } = useAppStore();
 
   // Auto-cycle features every 4 seconds
   useEffect(() => {
@@ -87,6 +89,17 @@ export default function Landing() {
           <a href="https://explorer.solana.com/address/EEnouVLAoQGMEbrypEhP3Ct5RgCViCWG4n1nCZNwMxjQ?cluster=devnet" target="_blank" rel="noopener noreferrer" className="hidden sm:flex items-center gap-1 text-xs text-[#64748B] hover:text-[#2563EB] transition-colors">
             <Zap className="w-3 h-3" /> On-Chain Program
           </a>
+          <button
+            onClick={toggleTheme}
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] transition-all"
+            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          >
+            {theme === "light" ? (
+              <Moon className="w-4 h-4 text-[#64748B]" />
+            ) : (
+              <Sun className="w-4 h-4 text-[#F59E0B]" />
+            )}
+          </button>
           <button
             onClick={login}
             disabled={!ready}
