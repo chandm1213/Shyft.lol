@@ -70,15 +70,31 @@ export function useWallet() {
   }, [solanaWallet]);
 
   const signAllTransactions = useMemo(() => {
-    if (!signTransaction) return undefined;
+    if (!solanaWallet) return undefined;
     return async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-      const results: T[] = [];
-      for (const tx of txs) {
-        results.push(await signTransaction(tx));
-      }
-      return results;
+      // Privy supports batch signing — sign all at once for single prompt
+      const inputs = txs.map((tx) => {
+        let serialized: Uint8Array;
+        if (tx instanceof Transaction) {
+          serialized = new Uint8Array(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
+        } else {
+          serialized = new Uint8Array(tx.serialize());
+        }
+        return { transaction: serialized };
+      });
+
+      const results = await (solanaWallet.signTransaction as any)(...inputs);
+      // Handle both single and array return
+      const resultsArray = Array.isArray(results) ? results : [results];
+
+      return resultsArray.map((result: any, i: number) => {
+        if (txs[i] instanceof Transaction) {
+          return Transaction.from(Buffer.from(result.signedTransaction)) as T;
+        }
+        return VersionedTransaction.deserialize(Buffer.from(result.signedTransaction)) as T;
+      });
     };
-  }, [signTransaction]);
+  }, [solanaWallet]);
 
   return {
     publicKey,

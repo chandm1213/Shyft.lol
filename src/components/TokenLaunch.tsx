@@ -18,7 +18,7 @@ import { useWallet } from "@/hooks/usePrivyWallet";
 import { toast } from "@/components/Toast";
 import { uploadImage } from "@/components/RichContent";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
-import { BAGS_PARTNER_CONFIG_KEY, BAGS_REF_CODE } from "@/lib/bags";
+import { BAGS_REF_CODE } from "@/lib/bags";
 
 interface TokenLaunchProps {
   onClose: () => void;
@@ -27,7 +27,7 @@ interface TokenLaunchProps {
 }
 
 export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunchProps) {
-  const { publicKey, signTransaction } = useWallet();
+  const { publicKey, signTransaction, signAllTransactions } = useWallet();
   const [step, setStep] = useState<"form" | "creating" | "launching" | "success">("form");
   const [name, setName] = useState(username ? `${username}` : "");
   const [symbol, setSymbol] = useState(username ? username.toUpperCase().slice(0, 6) : "");
@@ -64,7 +64,7 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
   };
 
   const handleLaunch = async () => {
-    if (!publicKey || !signTransaction) {
+    if (!publicKey || !signTransaction || !signAllTransactions) {
       toast("error", "Connect your wallet first");
       return;
     }
@@ -94,7 +94,7 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
       const { tokenMint, metadataUrl } = infoData.response;
       toast("success", "Token metadata created!");
 
-      // Step 2: Create & sign the launch transaction (single signature!)
+      // Step 2: Create fee share config + launch tx, then batch sign
       setStep("launching");
 
       const connection = new Connection(
@@ -102,6 +102,35 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
         "confirmed"
       );
 
+      // Create fee share config (returns unsigned txs)
+      const configRes = await fetch("/api/bags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create-config",
+          payerWallet: publicKey.toBase58(),
+          tokenMint,
+          feeClaimers: [{ wallet: publicKey.toBase58(), bps: 10000 }],
+        }),
+      });
+      const configData = await configRes.json();
+      if (!configData.success) throw new Error(configData.error || "Failed to create fee config");
+
+      // Sign & send config transactions (required before launch)
+      const configTxs = (configData.response.transactions || []).map((b64: string) =>
+        VersionedTransaction.deserialize(Buffer.from(b64, "base64"))
+      );
+
+      if (configTxs.length > 0) {
+        toast("info", "Approve transaction to set up token...");
+        const signedConfigTxs = await signAllTransactions(configTxs);
+        for (const signed of signedConfigTxs) {
+          const sig = await connection.sendRawTransaction(signed.serialize());
+          await connection.confirmTransaction(sig, "confirmed");
+        }
+      }
+
+      // Create launch transaction (now config exists on-chain)
       const launchRes = await fetch("/api/bags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -110,11 +139,13 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
           metadataUrl, tokenMint,
           launchWallet: publicKey.toBase58(),
           initialBuyLamports: Math.floor(Number(initialBuy) * 1e9),
+          configKey: configData.response.configKey,
         }),
       });
       const launchData = await launchRes.json();
       if (!launchData.success) throw new Error(launchData.error || "Failed to create launch tx");
 
+      toast("info", "Approve transaction to launch token...");
       const launchTx = VersionedTransaction.deserialize(
         Buffer.from(launchData.response.unsignedTxBase64, "base64")
       );
