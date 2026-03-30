@@ -823,7 +823,7 @@ export default function Chat() {
               {activeChat.exists && peerPubKey && (
                 <p className="text-[9px] text-[#94A3B8] mt-1 flex items-center gap-1 px-1">
                   <ShieldCheck className="w-2.5 h-2.5 text-[#16A34A]" />
-                  Messages encrypted with NaCl Box • ~0.005 SOL per message (reclaimable)
+                  Messages encrypted with NaCl Box • Gas-free messaging
                 </p>
               )}
             </div>

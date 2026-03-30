@@ -703,6 +703,7 @@ export class ShyftClient {
         chat: chatPda,
         user1,
         user2,
+        payer: treasury,
         systemProgram: SystemProgram.programId,
       })
       .instruction();
@@ -741,6 +742,7 @@ export class ShyftClient {
         message: messagePda,
         chat: chatPda,
         sender,
+        payer: treasury,
         systemProgram: SystemProgram.programId,
       })
       .instruction();
@@ -1074,6 +1076,7 @@ export class ShyftClient {
         message: messagePda,
         chat: chatPda,
         sender,
+        payer: treasury,
         systemProgram: SystemProgram.programId,
       })
       .instruction();

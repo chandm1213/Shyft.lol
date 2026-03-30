@@ -644,6 +644,14 @@ export type Shadowspace = {
           "name": "user2"
         },
         {
+          "name": "payer",
+          "docs": [
+            "Fee payer — treasury for gasless UX"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
@@ -2101,6 +2109,14 @@ export type Shadowspace = {
         },
         {
           "name": "sender",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Fee payer — treasury for gasless UX"
+          ],
           "writable": true,
           "signer": true
         },

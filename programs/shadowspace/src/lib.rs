@@ -683,24 +683,30 @@ impl<'info> Session<'info> for ReactToPost<'info> {
 #[derive(Accounts)]
 #[instruction(chat_id: u64)]
 pub struct CreateChat<'info> {
-    #[account(init_if_needed, payer = user1, space = 8 + Chat::LEN, seeds = [CHAT_SEED, &chat_id.to_le_bytes()], bump)]
+    #[account(init_if_needed, payer = payer, space = 8 + Chat::LEN, seeds = [CHAT_SEED, &chat_id.to_le_bytes()], bump)]
     pub chat: Account<'info, Chat>,
     #[account(mut)]
     pub user1: Signer<'info>,
     /// CHECK: Second chat participant
     pub user2: UncheckedAccount<'info>,
+    /// Fee payer — treasury for gasless UX
+    #[account(mut)]
+    pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 #[instruction(chat_id: u64, message_index: u64)]
 pub struct SendMessage<'info> {
-    #[account(init_if_needed, payer = sender, space = 8 + Message::LEN, seeds = [MESSAGE_SEED, &chat_id.to_le_bytes(), &message_index.to_le_bytes()], bump)]
+    #[account(init_if_needed, payer = payer, space = 8 + Message::LEN, seeds = [MESSAGE_SEED, &chat_id.to_le_bytes(), &message_index.to_le_bytes()], bump)]
     pub message: Account<'info, Message>,
     #[account(mut, seeds = [CHAT_SEED, &chat_id.to_le_bytes()], bump)]
     pub chat: Account<'info, Chat>,
     #[account(mut)]
     pub sender: Signer<'info>,
+    /// Fee payer — treasury for gasless UX
+    #[account(mut)]
+    pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
