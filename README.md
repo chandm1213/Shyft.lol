@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="public/shyft-logo-full.png" alt="Shyft" width="400" />
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Solana-Devnet-blueviolet?style=flat-square" />
   <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js" />
   <img src="https://img.shields.io/badge/Anchor-0.30-blue?style=flat-square" />
