@@ -76,6 +76,19 @@ export default function Sidebar() {
         </button>
       </div>
 
+      {/* X / Twitter */}
+      <div className="px-4 py-2 border-t border-[#E2E8F0]">
+        <a
+          href="https://x.com/Shyft_lol"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#1A1A2E] transition-all duration-200"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          <span>Follow on X</span>
+        </a>
+      </div>
+
       {/* Privacy status */}
       <div className="px-4 py-4 border-t border-[#E2E8F0]">
         <div className="flex items-center gap-3 px-4 py-3 bg-[#F0FDF4] rounded-xl">
