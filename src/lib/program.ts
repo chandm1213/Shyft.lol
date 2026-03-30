@@ -237,14 +237,26 @@ export class ShyftClient {
   async migrateProfile(): Promise<string> {
     const user = this.provider.wallet.publicKey;
     const [profilePda] = getProfilePda(user);
-    const sig = await this.program.methods
+    const treasury = await getTreasuryPubkey();
+
+    const ix = await this.program.methods
       .migrateProfile()
       .accounts({
         profile: profilePda,
         user,
         systemProgram: SystemProgram.programId,
       })
-      .rpc();
+      .instruction();
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = treasury;
+    tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+
+    // User signs
+    const signedTx = await this.provider.wallet.signTransaction(tx);
+
+    // Treasury co-signs and sends
+    const sig = await sponsorTransaction(signedTx, user.toBase58());
     return sig;
   }
 
@@ -1054,7 +1066,9 @@ export class ShyftClient {
     const [messagePda] = getMessagePda(chatId, messageIndex);
     const [chatPda] = getChatPda(chatId);
 
-    const sig = await this.program.methods
+    // Treasury-sponsored: user doesn't pay gas
+    const treasury = await getTreasuryPubkey();
+    const ix = await this.program.methods
       .sendMessage(new BN(chatId), new BN(messageIndex), content, isPayment, new BN(paymentAmount))
       .accounts({
         message: messagePda,
@@ -1062,7 +1076,13 @@ export class ShyftClient {
         sender,
         systemProgram: SystemProgram.programId,
       })
-      .rpc();
+      .instruction();
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = treasury;
+    tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+    const signed = await this.provider.wallet.signTransaction(tx);
+    const sig = await sponsorTransaction(signed, sender.toBase58());
 
     // Wait for confirmation so on-chain state is readable immediately
     await this.provider.connection.confirmTransaction(sig, "confirmed");
