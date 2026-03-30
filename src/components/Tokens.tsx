@@ -8,14 +8,12 @@ import {
   ExternalLink,
   Loader2,
   RefreshCw,
-  Crown,
   DollarSign,
-  Users,
-  BarChart3,
   Wallet,
   ChevronRight,
   Star,
-  Zap,
+  BarChart3,
+  Shield,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useWallet } from "@/hooks/usePrivyWallet";
@@ -53,7 +51,6 @@ export default function Tokens() {
   const [showLaunchModal, setShowLaunchModal] = useState(false);
   const [selectedToken, setSelectedToken] = useState<TokenItem | null>(null);
 
-  // Fetch token feed
   const fetchTokens = useCallback(async () => {
     setLoading(true);
     try {
@@ -68,7 +65,6 @@ export default function Tokens() {
     setLoading(false);
   }, []);
 
-  // Fetch claimable fees
   const fetchClaimable = useCallback(async () => {
     if (!publicKey) return;
     setLoadingFees(true);
@@ -84,14 +80,10 @@ export default function Tokens() {
     setLoadingFees(false);
   }, [publicKey]);
 
-  useEffect(() => {
-    fetchTokens();
-  }, [fetchTokens]);
+  useEffect(() => { fetchTokens(); }, [fetchTokens]);
 
   useEffect(() => {
-    if (tab === "earnings" && publicKey) {
-      fetchClaimable();
-    }
+    if (tab === "earnings" && publicKey) fetchClaimable();
   }, [tab, publicKey, fetchClaimable]);
 
   const totalClaimableSOL = claimable.reduce((sum, p) => {
@@ -107,11 +99,7 @@ export default function Tokens() {
       const res = await fetch("/api/bags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "claim",
-          walletAddress: publicKey.toBase58(),
-          tokenMint,
-        }),
+        body: JSON.stringify({ action: "claim", walletAddress: publicKey.toBase58(), tokenMint }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
@@ -123,21 +111,21 @@ export default function Tokens() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center">
             <Coins className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Creator Tokens</h1>
-            <p className="text-xs text-gray-500">Launch, trade & earn — powered by Bags.fm</p>
+            <h1 className="text-lg font-bold text-[#1A1A2E]">Creator Tokens</h1>
+            <p className="text-xs text-[#64748B]">Launch, trade & earn — powered by Bags.fm</p>
           </div>
         </div>
         <button
           onClick={() => setShowLaunchModal(true)}
-          className="flex items-center gap-1.5 py-2 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium text-sm hover:from-purple-700 hover:to-pink-700 transition"
+          className="flex items-center gap-1.5 py-2 px-4 bg-gradient-to-r from-[#2563EB] to-[#7C3AED] text-white rounded-xl font-medium text-sm hover:opacity-90 transition"
         >
           <Rocket className="w-4 h-4" />
           Launch Token
@@ -145,19 +133,17 @@ export default function Tokens() {
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-1 mb-4">
-        {[
-          { id: "discover", label: "Discover", icon: TrendingUp },
-          { id: "my-tokens", label: "My Tokens", icon: Wallet },
-          { id: "earnings", label: "Earnings", icon: DollarSign },
-        ].map(({ id, label, icon: Icon }) => (
+      <div className="flex bg-[#F1F5F9] rounded-xl p-1">
+        {([
+          { id: "discover" as const, label: "Discover", icon: TrendingUp },
+          { id: "my-tokens" as const, label: "My Tokens", icon: Wallet },
+          { id: "earnings" as const, label: "Earnings", icon: DollarSign },
+        ]).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
-            onClick={() => setTab(id as typeof tab)}
+            onClick={() => setTab(id)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition ${
-              tab === id
-                ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow"
-                : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              tab === id ? "bg-white text-[#1A1A2E] shadow-sm" : "text-[#64748B] hover:text-[#475569]"
             }`}
           >
             <Icon className="w-3.5 h-3.5" />
@@ -170,24 +156,23 @@ export default function Tokens() {
       {tab === "discover" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Trending Tokens</h2>
-            <button
-              onClick={fetchTokens}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
-            >
-              <RefreshCw className={`w-4 h-4 text-gray-400 ${loading ? "animate-spin" : ""}`} />
+            <h2 className="text-sm font-semibold text-[#475569]">Trending Tokens</h2>
+            <button onClick={fetchTokens} className="p-1.5 hover:bg-[#F1F5F9] rounded-lg transition">
+              <RefreshCw className={`w-4 h-4 text-[#94A3B8] ${loading ? "animate-spin" : ""}`} />
             </button>
           </div>
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+              <Loader2 className="w-6 h-6 text-[#2563EB] animate-spin" />
             </div>
           ) : tokens.length === 0 ? (
             <div className="text-center py-12">
-              <Coins className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">No tokens found</p>
-              <p className="text-xs text-gray-400 mt-1">Be the first to launch a creator token!</p>
+              <div className="w-14 h-14 rounded-2xl bg-[#F1F5F9] flex items-center justify-center mx-auto mb-3">
+                <Coins className="w-7 h-7 text-[#94A3B8]" />
+              </div>
+              <p className="text-sm font-medium text-[#475569]">No tokens found</p>
+              <p className="text-xs text-[#94A3B8] mt-1">Be the first to launch a creator token!</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -195,34 +180,32 @@ export default function Tokens() {
                 <button
                   key={token.tokenMint}
                   onClick={() => setSelectedToken(token)}
-                  className="w-full flex items-center gap-3 p-3 bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 transition text-left"
+                  className="w-full flex items-center gap-3 p-3 bg-white rounded-2xl border border-[#E2E8F0] hover:border-[#2563EB]/30 hover:shadow-sm transition text-left"
                 >
-                  <span className="text-xs font-medium text-gray-400 w-5">{i + 1}</span>
+                  <span className="text-xs font-medium text-[#94A3B8] w-5">{i + 1}</span>
                   {token.image ? (
                     <img src={token.image} alt="" className="w-9 h-9 rounded-full object-cover" />
                   ) : (
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center">
                       <span className="text-xs font-bold text-white">{token.symbol?.[0] || "?"}</span>
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{token.name}</span>
-                      <span className="text-xs text-gray-400">${token.symbol}</span>
+                      <span className="text-sm font-semibold text-[#1A1A2E] truncate">{token.name}</span>
+                      <span className="text-xs text-[#94A3B8]">${token.symbol}</span>
                     </div>
-                    <p className="text-xs text-gray-500 truncate">{token.description}</p>
+                    <p className="text-xs text-[#64748B] truncate">{token.description}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                      token.status === "MIGRATED"
-                        ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-                        : token.status === "PRE_GRAD"
-                        ? "bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400"
-                        : "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
+                      token.status === "MIGRATED" ? "bg-[#F0FDF4] text-[#16A34A]"
+                        : token.status === "PRE_GRAD" ? "bg-[#FFFBEB] text-[#D97706]"
+                        : "bg-[#F1F5F9] text-[#64748B]"
                     }`}>
                       {token.status === "MIGRATED" ? "Live" : token.status === "PRE_GRAD" ? "Pre-Grad" : token.status}
                     </span>
-                    <ChevronRight className="w-4 h-4 text-gray-300" />
+                    <ChevronRight className="w-4 h-4 text-[#CBD5E1]" />
                   </div>
                 </button>
               ))}
@@ -235,38 +218,40 @@ export default function Tokens() {
       {tab === "my-tokens" && (
         <div>
           {!isConnected ? (
-            <div className="text-center py-12">
-              <Wallet className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">Connect your wallet to see your tokens</p>
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-2xl bg-[#EFF6FF] flex items-center justify-center mx-auto mb-3">
+                  <Wallet className="w-7 h-7 text-[#2563EB]" />
+                </div>
+                <p className="text-sm font-medium text-[#475569]">Connect your wallet</p>
+                <p className="text-xs text-[#94A3B8] mt-1">to see your tokens</p>
+              </div>
             </div>
           ) : (
             <div>
-              <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4 mb-4">
+              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4 sm:p-5 mb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Star className="w-4 h-4 text-purple-500" />
-                  <span className="text-sm font-semibold text-purple-700 dark:text-purple-300">Launch Your Token</span>
+                  <div className="w-8 h-8 rounded-xl bg-[#EFF6FF] flex items-center justify-center">
+                    <Star className="w-4 h-4 text-[#2563EB]" />
+                  </div>
+                  <span className="text-sm font-semibold text-[#1A1A2E]">Launch Your Token</span>
                 </div>
-                <p className="text-xs text-purple-600/80 dark:text-purple-400/80 mb-3">
+                <p className="text-xs text-[#64748B] mb-3">
                   Create your own token and earn fees every time someone trades it. Your supporters can buy in and trade with each other.
                 </p>
                 <button
                   onClick={() => setShowLaunchModal(true)}
-                  className="flex items-center gap-1.5 py-2 px-4 bg-purple-600 text-white rounded-lg font-medium text-xs hover:bg-purple-700 transition"
+                  className="flex items-center gap-1.5 py-2 px-4 bg-[#2563EB] text-white rounded-xl font-medium text-xs hover:bg-[#1D4ED8] transition"
                 >
                   <Rocket className="w-3.5 h-3.5" />
                   Launch Token
                 </button>
               </div>
 
-              <p className="text-xs text-gray-400 text-center py-4">
+              <p className="text-xs text-[#94A3B8] text-center py-4">
                 Tokens you&apos;ve created or hold will appear here.
                 <br />
-                <a
-                  href={`https://bags.fm/?ref=${BAGS_REF_CODE}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-purple-400 hover:underline"
-                >
+                <a href={`https://bags.fm/?ref=${BAGS_REF_CODE}`} target="_blank" rel="noopener noreferrer" className="text-[#2563EB] hover:underline">
                   Browse all tokens on Bags.fm →
                 </a>
               </p>
@@ -279,67 +264,69 @@ export default function Tokens() {
       {tab === "earnings" && (
         <div>
           {!isConnected ? (
-            <div className="text-center py-12">
-              <DollarSign className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">Connect your wallet to see earnings</p>
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-2xl bg-[#F0FDF4] flex items-center justify-center mx-auto mb-3">
+                  <DollarSign className="w-7 h-7 text-[#16A34A]" />
+                </div>
+                <p className="text-sm font-medium text-[#475569]">Connect your wallet</p>
+                <p className="text-xs text-[#94A3B8] mt-1">to see your earnings</p>
+              </div>
             </div>
           ) : (
             <div>
-              {/* Earnings Summary */}
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 mb-4">
+              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4 sm:p-5 mb-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-green-600 dark:text-green-400 mb-0.5">Total Claimable</p>
-                    <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                      {formatSOL(totalClaimableSOL)} SOL
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-xl bg-[#F0FDF4] flex items-center justify-center">
+                        <DollarSign className="w-4 h-4 text-[#16A34A]" />
+                      </div>
+                      <span className="text-xs font-medium text-[#64748B]">Total Claimable</span>
+                    </div>
+                    <p className="text-2xl font-bold text-[#1A1A2E]">
+                      {formatSOL(totalClaimableSOL)} <span className="text-sm font-medium text-[#64748B]">SOL</span>
+                    </p>
+                    <p className="text-[10px] text-[#16A34A] flex items-center gap-1 mt-1">
+                      <Shield className="w-2.5 h-2.5" /> Fee earnings from token trading
                     </p>
                   </div>
-                  <button
-                    onClick={fetchClaimable}
-                    className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition"
-                  >
-                    <RefreshCw className={`w-4 h-4 text-green-500 ${loadingFees ? "animate-spin" : ""}`} />
+                  <button onClick={fetchClaimable} className="p-2 hover:bg-[#F1F5F9] rounded-lg transition">
+                    <RefreshCw className={`w-4 h-4 text-[#94A3B8] ${loadingFees ? "animate-spin" : ""}`} />
                   </button>
                 </div>
               </div>
 
-              {/* Claimable Positions */}
               {loadingFees ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-5 h-5 text-purple-500 animate-spin" />
+                  <Loader2 className="w-5 h-5 text-[#2563EB] animate-spin" />
                 </div>
               ) : claimable.length === 0 ? (
                 <div className="text-center py-8">
-                  <BarChart3 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No claimable fees yet</p>
-                  <p className="text-xs text-gray-400 mt-1">Launch a token and get trading volume to earn fees</p>
+                  <div className="w-12 h-12 rounded-2xl bg-[#F1F5F9] flex items-center justify-center mx-auto mb-3">
+                    <BarChart3 className="w-6 h-6 text-[#94A3B8]" />
+                  </div>
+                  <p className="text-sm font-medium text-[#475569]">No claimable fees yet</p>
+                  <p className="text-xs text-[#94A3B8] mt-1">Launch a token and get trading volume to earn fees</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {claimable.map((position) => {
                     const claimableAmount = Number(
-                      position.totalClaimableLamportsUserShare ||
-                      position.virtualPoolClaimableAmount ||
-                      0
+                      position.totalClaimableLamportsUserShare || position.virtualPoolClaimableAmount || 0
                     ) + Number(position.dammPoolClaimableAmount || 0);
-
                     return (
-                      <div
-                        key={position.baseMint}
-                        className="flex items-center justify-between p-3 bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700"
-                      >
+                      <div key={position.baseMint} className="flex items-center justify-between p-3 bg-white rounded-2xl border border-[#E2E8F0]">
                         <div>
-                          <p className="text-xs font-mono text-gray-600 dark:text-gray-400">
+                          <p className="text-xs font-mono text-[#64748B]">
                             {position.baseMint.slice(0, 8)}...{position.baseMint.slice(-8)}
                           </p>
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                            {formatSOL(claimableAmount)} SOL
-                          </p>
+                          <p className="text-sm font-semibold text-[#1A1A2E]">{formatSOL(claimableAmount)} SOL</p>
                         </div>
                         <button
                           onClick={() => handleClaim(position.baseMint)}
                           disabled={claimableAmount <= 0}
-                          className="py-1.5 px-3 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="py-1.5 px-3 bg-[#16A34A] text-white rounded-xl text-xs font-medium hover:bg-[#15803D] transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Claim
                         </button>
@@ -356,51 +343,31 @@ export default function Tokens() {
       {/* Token Detail / Trade Modal */}
       {selectedToken && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-y-auto">
-            {/* Token Header */}
-            <div className="p-5 border-b border-gray-200 dark:border-gray-700">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-y-auto">
+            <div className="p-5 border-b border-[#E2E8F0]">
               <div className="flex items-center gap-3">
                 {selectedToken.image ? (
                   <img src={selectedToken.image} alt="" className="w-12 h-12 rounded-full object-cover" />
                 ) : (
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center">
                     <span className="text-lg font-bold text-white">{selectedToken.symbol?.[0]}</span>
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">{selectedToken.name}</h2>
+                  <h2 className="text-lg font-bold text-[#1A1A2E]">{selectedToken.name}</h2>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">${selectedToken.symbol}</span>
-                    <a
-                      href={`https://bags.fm/${selectedToken.tokenMint}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-purple-500 hover:underline flex items-center gap-0.5"
-                    >
+                    <span className="text-sm text-[#64748B]">${selectedToken.symbol}</span>
+                    <a href={`https://bags.fm/${selectedToken.tokenMint}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2563EB] hover:underline flex items-center gap-0.5">
                       Bags <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
                 </div>
-                <button
-                  onClick={() => setSelectedToken(null)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-                >
-                  ✕
-                </button>
+                <button onClick={() => setSelectedToken(null)} className="p-2 hover:bg-[#F1F5F9] rounded-lg">✕</button>
               </div>
-              {selectedToken.description && (
-                <p className="text-xs text-gray-500 mt-2">{selectedToken.description}</p>
-              )}
+              {selectedToken.description && <p className="text-xs text-[#64748B] mt-2">{selectedToken.description}</p>}
             </div>
-
-            {/* Trade Widget */}
             <div className="p-4">
-              <TokenTrade
-                tokenMint={selectedToken.tokenMint}
-                tokenSymbol={selectedToken.symbol}
-                tokenImage={selectedToken.image}
-                compact
-              />
+              <TokenTrade tokenMint={selectedToken.tokenMint} tokenSymbol={selectedToken.symbol} tokenImage={selectedToken.image} compact />
             </div>
           </div>
         </div>
@@ -410,11 +377,7 @@ export default function Tokens() {
       {showLaunchModal && (
         <TokenLaunch
           onClose={() => setShowLaunchModal(false)}
-          onSuccess={(mint) => {
-            setShowLaunchModal(false);
-            fetchTokens();
-            toast("success", "Your token is live!");
-          }}
+          onSuccess={(mint) => { setShowLaunchModal(false); fetchTokens(); toast("success", "Your token is live!"); }}
           username={useAppStore.getState().currentUser?.username}
         />
       )}
