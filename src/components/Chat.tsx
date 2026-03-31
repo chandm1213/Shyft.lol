@@ -94,7 +94,7 @@ export default function Chat() {
   const [creatingChat, setCreatingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const publishingKeyRef = useRef(false);
+  const publishingChatsRef = useRef(new Set<number>());
   const keyPublishedChats = useRef(new Set<number>());
 
   useEffect(() => {
@@ -224,23 +224,23 @@ export default function Chat() {
 
       // First: ensure WE have published our key (critical for second user)
       // Use a ref lock to prevent concurrent calls from publishing multiple times
-      if (chatInfo.exists && !publishingKeyRef.current && !keyPublishedChats.current.has(chatInfo.chatId)) {
+      if (chatInfo.exists && !publishingChatsRef.current.has(chatInfo.chatId) && !keyPublishedChats.current.has(chatInfo.chatId)) {
         try {
           const hasMyKey = await program.findMyEncryptionKey(chatInfo.chatId, myAddr);
           if (!hasMyKey) {
-            publishingKeyRef.current = true;
+            publishingChatsRef.current.add(chatInfo.chatId);
             console.log("🔑 Publishing our encryption key for this chat...");
             const msgIndex = await program.getNextMessageIndex(chatInfo.chatId);
             await program.publishEncryptionKey(chatInfo.chatId, msgIndex, encryptionKeys.publicKey);
             console.log("✅ Encryption key published on-chain!");
             keyPublishedChats.current.add(chatInfo.chatId);
-            publishingKeyRef.current = false;
+            publishingChatsRef.current.delete(chatInfo.chatId);
           } else {
             // Already on-chain, mark so we don't check again
             keyPublishedChats.current.add(chatInfo.chatId);
           }
         } catch (keyErr) {
-          publishingKeyRef.current = false;
+          publishingChatsRef.current.delete(chatInfo.chatId);
           console.warn("Key publish check failed:", keyErr);
         }
       }
@@ -346,12 +346,31 @@ export default function Chat() {
 
       }
 
-      let peerKey = peerPubKey;
-      if (!peerKey) {
-        const myAddr = publicKey.toBase58();
-        peerKey = await program.findPeerEncryptionKey(chatInfo.chatId, myAddr);
-        setPeerPubKey(peerKey);
+      // ===== Ensure our encryption key is published (critical for 2nd participant) =====
+      // loadMessages does this too, but there's a race condition if user sends before it completes
+      if (chatInfo.exists && !keyPublishedChats.current.has(chatInfo.chatId)) {
+        try {
+          const myAddr = publicKey.toBase58();
+          const hasMyKey = await program.findMyEncryptionKey(chatInfo.chatId, myAddr);
+          if (!hasMyKey) {
+            console.log("🔑 handleSend: Publishing our encryption key before sending...");
+            const keyMsgIndex = await program.getNextMessageIndex(chatInfo.chatId);
+            await program.publishEncryptionKey(chatInfo.chatId, keyMsgIndex, encryptionKeys.publicKey);
+            console.log("✅ handleSend: Encryption key published!");
+            keyPublishedChats.current.add(chatInfo.chatId);
+          } else {
+            keyPublishedChats.current.add(chatInfo.chatId);
+          }
+        } catch (keyErr) {
+          console.warn("handleSend: Key publish failed:", keyErr);
+        }
       }
+
+      // Always do a fresh peer key lookup for THIS specific chat
+      // (peerPubKey state may be stale from a previously selected chat)
+      const myAddr2 = publicKey.toBase58();
+      let peerKey = await program.findPeerEncryptionKey(chatInfo.chatId, myAddr2);
+      setPeerPubKey(peerKey);
 
       const msgIndex = await program.getNextMessageIndex(chatInfo.chatId);
 
