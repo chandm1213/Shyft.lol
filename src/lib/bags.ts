@@ -6,12 +6,9 @@
  */
 
 // ─── Constants ───
-// Partner wallet that created the partner key on Bags dashboard
-export const BAGS_PARTNER_WALLET = "HbRuM3kzMcUeGXX2ytEz33rtB6Wa56RpBcA91E38SjQ9";
-// Partner config PDA derived from the wallet above — lives on-chain
-export const BAGS_PARTNER_CONFIG_PDA = "B94bGwVuX7tWX8VkkyBZLmQESJ537URMcJcVkF8tdi5T";
 export const BAGS_REF_CODE = "shyftlol";
 export const BAGS_PARTNER_FEE_BPS = 2500; // 25%
+// Partner wallet + config PDA are server-side only (in .env.local & Vercel env vars)
 
 // Base URL for Bags API (proxied through our API routes)
 const API_BASE = "/api/bags";

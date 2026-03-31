@@ -12,10 +12,9 @@ import { BagsSDK } from "@bagsfm/bags-sdk";
 const BAGS_API_KEY = (process.env.BAGS_API_KEY || "").trim();
 // Bags operates on Solana mainnet — use Helius mainnet RPC
 const BAGS_RPC_URL = process.env.BAGS_MAINNET_RPC_URL || process.env.HELIUS_MAINNET_RPC || `https://mainnet.helius-rpc.com/?api-key=${process.env.NEXT_PUBLIC_HELIUS_API_KEY}`;
-// Bags partner config — the partner wallet and its derived PDA
-// Used in createBagsFeeShareConfig to route 25% of trading fees to Shyft
-const BAGS_PARTNER_WALLET = "HbRuM3kzMcUeGXX2ytEz33rtB6Wa56RpBcA91E38SjQ9";
-const BAGS_PARTNER_CONFIG_PDA = "B94bGwVuX7tWX8VkkyBZLmQESJ537URMcJcVkF8tdi5T";
+// Bags partner config — read from env vars (server-side only)
+const BAGS_PARTNER_WALLET = (process.env.BAGS_PARTNER_WALLET || "").trim();
+const BAGS_PARTNER_CONFIG_PDA = (process.env.BAGS_PARTNER_CONFIG_PDA || "").trim();
 
 function getSDK() {
   const connection = new Connection(BAGS_RPC_URL, "confirmed");

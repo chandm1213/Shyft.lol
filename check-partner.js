@@ -1,10 +1,12 @@
 const { Connection, PublicKey } = require("@solana/web3.js");
 const { deriveBagsFeeShareV2PartnerConfigPda } = require("@bagsfm/bags-sdk/dist/utils/fee-share-v2/partner-config");
 
-const HELIUS_KEY = "7d359733-8771-4d20-af8c-54f756c96bb1";
+const HELIUS_KEY = process.env.NEXT_PUBLIC_HELIUS_API_KEY;
+if (!HELIUS_KEY) { console.error("Set NEXT_PUBLIC_HELIUS_API_KEY env var"); process.exit(1); }
 const conn = new Connection("https://mainnet.helius-rpc.com/?api-key=" + HELIUS_KEY, "confirmed");
 
-const partnerConfigPda = new PublicKey("B94bGwVuX7tWX8VkkyBZLmQESJ537URMcJcVkF8tdi5T");
+const partnerConfigPda = new PublicKey(process.env.BAGS_PARTNER_CONFIG_PDA || "");
+if (!process.env.BAGS_PARTNER_CONFIG_PDA) { console.error("Set BAGS_PARTNER_CONFIG_PDA env var"); process.exit(1); }
 
 async function main() {
   try {

@@ -1,9 +1,11 @@
 const { Connection, PublicKey } = require("@solana/web3.js");
 
-const HELIUS_KEY = "7d359733-8771-4d20-af8c-54f756c96bb1";
+const HELIUS_KEY = process.env.NEXT_PUBLIC_HELIUS_API_KEY;
+if (!HELIUS_KEY) { console.error("Set NEXT_PUBLIC_HELIUS_API_KEY env var"); process.exit(1); }
 const conn = new Connection("https://mainnet.helius-rpc.com/?api-key=" + HELIUS_KEY, "confirmed");
 const wallet = "G8iDMHSpKwBQ9pcmXsSceu3WU487ZJY6X4zYPQbhJ68H";
-const partnerPda = "B94bGwVuX7tWX8VkkyBZLmQESJ537URMcJcVkF8tdi5T";
+const partnerPda = process.env.BAGS_PARTNER_CONFIG_PDA || "";
+if (!partnerPda) { console.error("Set BAGS_PARTNER_CONFIG_PDA env var"); process.exit(1); }
 
 async function main() {
   // Get recent transactions for the wallet
