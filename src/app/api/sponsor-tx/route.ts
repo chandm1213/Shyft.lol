@@ -28,8 +28,26 @@ const ALLOWED_PROGRAMS = new Set([
 function getTreasuryKeypair(): Keypair {
   const secret = process.env.TREASURY_PRIVATE_KEY;
   if (!secret) throw new Error("TREASURY_PRIVATE_KEY not set");
-  const bytes = JSON.parse(secret) as number[];
-  return Keypair.fromSecretKey(new Uint8Array(bytes));
+  // Support both formats: JSON byte array [12,45,...] or base58 string (Phantom export)
+  if (secret.trimStart().startsWith("[")) {
+    const bytes = JSON.parse(secret) as number[];
+    return Keypair.fromSecretKey(new Uint8Array(bytes));
+  }
+  // base58 string — decode manually
+  const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const str = secret.trim();
+  const bytes: number[] = [0];
+  for (const char of str) {
+    let carry = ALPHABET.indexOf(char);
+    for (let j = 0; j < bytes.length; j++) {
+      carry += bytes[j] * 58;
+      bytes[j] = carry & 0xff;
+      carry >>= 8;
+    }
+    while (carry > 0) { bytes.push(carry & 0xff); carry >>= 8; }
+  }
+  for (let i = 0; i < str.length && str[i] === "1"; i++) bytes.push(0);
+  return Keypair.fromSecretKey(new Uint8Array(bytes.reverse()));
 }
 
 // Shadowspace on-chain program is on devnet — sponsor-tx must use devnet
