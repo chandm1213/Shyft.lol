@@ -12,8 +12,10 @@ import { BagsSDK } from "@bagsfm/bags-sdk";
 const BAGS_API_KEY = (process.env.BAGS_API_KEY || "").trim();
 // Bags operates on Solana mainnet — use Helius mainnet RPC
 const BAGS_RPC_URL = process.env.BAGS_MAINNET_RPC_URL || process.env.HELIUS_MAINNET_RPC || `https://mainnet.helius-rpc.com/?api-key=${process.env.NEXT_PUBLIC_HELIUS_API_KEY}`;
-// Bags config key (Meteora config key from Bags partner dashboard — NOT a wallet)
-const BAGS_CONFIG_KEY = "B94bGwVuX7tWX8VkkyBZLmQESJ537URMcJcVkF8tdi5T";
+// Bags partner config — the partner wallet and its derived PDA
+// Used in createBagsFeeShareConfig to route 25% of trading fees to Shyft
+const BAGS_PARTNER_WALLET = "HbRuM3kzMcUeGXX2ytEz33rtB6Wa56RpBcA91E38SjQ9";
+const BAGS_PARTNER_CONFIG_PDA = "B94bGwVuX7tWX8VkkyBZLmQESJ537URMcJcVkF8tdi5T";
 
 function getSDK() {
   const connection = new Connection(BAGS_RPC_URL, "confirmed");
@@ -234,7 +236,7 @@ export async function POST(req: NextRequest) {
           tokenMint: new PublicKey(tokenMint),
           launchWallet: new PublicKey(launchWallet),
           initialBuyLamports: initialBuyLamports || 0,
-          configKey: new PublicKey(configKey || BAGS_CONFIG_KEY),
+          configKey: new PublicKey(configKey),
         });
 
         // Serialize the unsigned transaction for the frontend to sign
@@ -308,7 +310,7 @@ export async function POST(req: NextRequest) {
           return err("Missing payerWallet or tokenMint");
         }
 
-        // Build fee share config (partner fee sharing via BAGS_CONFIG_KEY in launch tx)
+        // Include Shyft partner config so 25% of trading fees route to Shyft
         const configResult = await sdk.config.createBagsFeeShareConfig({
           payer: new PublicKey(payerWallet),
           baseMint: new PublicKey(tokenMint),
@@ -316,6 +318,8 @@ export async function POST(req: NextRequest) {
             user: new PublicKey(fc.wallet),
             userBps: fc.bps,
           })),
+          partner: new PublicKey(BAGS_PARTNER_WALLET),
+          partnerConfig: new PublicKey(BAGS_PARTNER_CONFIG_PDA),
         });
 
         const transactions = (configResult.transactions || []).map((tx: any) =>
