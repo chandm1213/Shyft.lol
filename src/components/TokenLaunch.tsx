@@ -26,6 +26,19 @@ interface TokenLaunchProps {
   username?: string;
 }
 
+function friendlyError(msg: string): string {
+  if (!msg) return "Something went wrong";
+  const lower = msg.toLowerCase();
+  if (lower.includes("insufficient lamports") || lower.includes("insufficient funds") || lower.includes("0x1"))
+    return "Insufficient SOL balance. Please top up your wallet.";
+  if (lower.includes("user rejected") || lower.includes("user denied"))
+    return "Transaction cancelled.";
+  if (lower.includes("blockhash") || lower.includes("expired"))
+    return "Transaction expired. Please try again.";
+  if (msg.length > 100) return msg.slice(0, 80) + "…";
+  return msg;
+}
+
 export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunchProps) {
   const { publicKey, signTransaction, signAllTransactions } = useWallet();
   const [step, setStep] = useState<"form" | "creating" | "launching" | "success">("form");
@@ -160,9 +173,10 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
       onSuccess?.(tokenMint);
     } catch (err: any) {
       console.error("Token launch error:", err);
-      setError(err.message || "Failed to launch token");
+      const msg = friendlyError(err.message);
+      setError(msg);
       setStep("form");
-      toast("error", err.message || "Launch failed");
+      toast("error", msg);
     }
   };
 

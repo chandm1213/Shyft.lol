@@ -24,6 +24,21 @@ interface TokenTradeProps {
   compact?: boolean;
 }
 
+function friendlyError(msg: string): string {
+  if (!msg) return "Something went wrong";
+  const lower = msg.toLowerCase();
+  if (lower.includes("insufficient lamports") || lower.includes("insufficient funds") || lower.includes("0x1"))
+    return "Insufficient SOL balance. Please top up your wallet.";
+  if (lower.includes("user rejected") || lower.includes("user denied"))
+    return "Transaction cancelled.";
+  if (lower.includes("blockhash") || lower.includes("expired"))
+    return "Transaction expired. Please try again.";
+  if (lower.includes("slippage"))
+    return "Price moved too much. Try increasing slippage.";
+  if (msg.length > 100) return msg.slice(0, 80) + "…";
+  return msg;
+}
+
 export default function TokenTrade({
   tokenMint,
   tokenSymbol,
@@ -149,8 +164,9 @@ export default function TokenTrade({
       setQuote(null);
     } catch (err: any) {
       console.error("Trade error:", err);
-      setError(err.message || "Trade failed");
-      toast("error", err.message || "Trade failed");
+      const msg = friendlyError(err.message);
+      setError(msg);
+      toast("error", msg);
     }
     setLoading(false);
   };
