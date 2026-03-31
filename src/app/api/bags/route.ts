@@ -94,8 +94,74 @@ export async function GET(req: NextRequest) {
         return ok(tokens);
       }
 
+      case "user-tokens": {
+        const wallet = searchParams.get("wallet");
+        if (!wallet) return err("Missing wallet parameter");
+
+        // Strategy: combine multiple sources to find all tokens by this wallet
+        const walletPk = new PublicKey(wallet);
+        const tokenMap = new Map<string, any>();
+
+        // 1) Get token mints where user is fee-share admin (= created via Bags)
+        try {
+          const adminMints: string[] = await sdk.feeShareAdmin.getAdminTokenMints(walletPk);
+          for (const mint of adminMints) {
+            tokenMap.set(mint, { tokenMint: mint });
+          }
+        } catch (e) {
+          console.warn("[user-tokens] getAdminTokenMints failed:", e);
+        }
+
+        // 2) Also get claimable positions (covers tokens even if admin query fails)
+        try {
+          const positions = await sdk.fee.getAllClaimablePositions(walletPk);
+          for (const p of positions) {
+            if (p.baseMint && !tokenMap.has(p.baseMint)) {
+              tokenMap.set(p.baseMint, { tokenMint: p.baseMint });
+            }
+          }
+        } catch (e) {
+          console.warn("[user-tokens] getAllClaimablePositions failed:", e);
+        }
+
+        // 3) Fetch the global feed and match by launchWallet
+        try {
+          const feed: any[] = await sdk.bagsApiClient.get("/token-launch/feed");
+          if (Array.isArray(feed)) {
+            for (const token of feed) {
+              // Match tokens where launchWallet equals user's wallet
+              if (token.launchWallet === wallet) {
+                tokenMap.set(token.tokenMint, token);
+              }
+              // Also enrich any mints we already found from fee queries
+              if (tokenMap.has(token.tokenMint)) {
+                tokenMap.set(token.tokenMint, { ...tokenMap.get(token.tokenMint), ...token });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[user-tokens] feed fetch failed:", e);
+        }
+
+        // 4) For any mints that are still bare (not in feed), try to get info individually
+        const results = Array.from(tokenMap.values());
+        const enriched = await Promise.all(
+          results.map(async (token) => {
+            if (token.name) return token; // Already has feed data
+            try {
+              const info = await sdk.bagsApiClient.get(`/token-launch/info?tokenMint=${token.tokenMint}`);
+              return { ...token, ...(info && typeof info === 'object' ? info as Record<string, unknown> : {}) };
+            } catch {
+              return token; // Return bare mint if info lookup fails
+            }
+          })
+        );
+
+        return ok(enriched);
+      }
+
       default:
-        return err("Unknown action. Use: feed, creators, fees, lifetime-fees, top-tokens");
+        return err("Unknown action. Use: feed, creators, fees, lifetime-fees, top-tokens, user-tokens");
     }
   } catch (error: any) {
     console.error("[Bags GET]", error);

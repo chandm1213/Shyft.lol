@@ -32,7 +32,7 @@ interface TokenItem {
   status: string;
   twitter?: string;
   website?: string;
-  accountKeys?: string[];
+  launchWallet?: string;
 }
 
 interface ClaimablePosition {
@@ -84,24 +84,17 @@ export default function Tokens() {
     setLoadingFees(false);
   }, [publicKey]);
 
-  // Fetch user's tokens by matching wallet in feed accountKeys
+  // Fetch user's tokens via dedicated endpoint (fee-admin mints + feed launchWallet match)
   const fetchMyTokens = useCallback(async () => {
     if (!publicKey) return;
     setLoadingMyTokens(true);
     try {
       const walletStr = publicKey.toBase58();
-
-      // Get the full feed — each token has accountKeys containing the launch wallet
-      const feedRes = await fetch("/api/bags?action=feed");
-      const feedData = await feedRes.json();
-      const feedTokens: TokenItem[] = feedData.success && Array.isArray(feedData.response) ? feedData.response : [];
-
-      // Match tokens where user's wallet is in accountKeys (= user launched it)
-      const matched = feedTokens.filter(
-        (t) => Array.isArray(t.accountKeys) && t.accountKeys.includes(walletStr)
-      );
-
-      setMyTokens(matched);
+      const res = await fetch(`/api/bags?action=user-tokens&wallet=${walletStr}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.response)) {
+        setMyTokens(data.response);
+      }
     } catch (err) {
       console.error("Failed to fetch my tokens:", err);
     }
