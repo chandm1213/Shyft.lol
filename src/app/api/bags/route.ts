@@ -30,9 +30,29 @@ function err(message: string, status = 400) {
   return NextResponse.json({ success: false, error: message }, { status });
 }
 
+// Allowed origins — only shyft.lol can call this API
+const ALLOWED_ORIGINS = new Set([
+  "https://www.shyft.lol",
+  "https://shyft.lol",
+  "http://localhost:3000",
+  "http://localhost:3001",
+]);
+
+function isAllowedOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get("origin") || "";
+  const referer = req.headers.get("referer") || "";
+  if (origin && ALLOWED_ORIGINS.has(origin)) return true;
+  for (const allowed of ALLOWED_ORIGINS) {
+    if (referer.startsWith(allowed)) return true;
+  }
+  if (!origin && !referer) return true; // internal server-side calls
+  return false;
+}
+
 // ─── GET /api/bags?action=feed|creators|fees ───
 
 export async function GET(req: NextRequest) {
+  if (!isAllowedOrigin(req)) return err("Unauthorized", 403);
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action");
 
@@ -195,6 +215,7 @@ export async function GET(req: NextRequest) {
 // ─── POST /api/bags ───
 
 export async function POST(req: NextRequest) {
+  if (!isAllowedOrigin(req)) return err("Unauthorized", 403);
   try {
     const body = await req.json();
     const { action } = body;

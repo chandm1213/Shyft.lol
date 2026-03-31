@@ -57,9 +57,41 @@ export async function GET() {
   }
 }
 
+// Allowed origins — only shyft.lol can call this API
+const ALLOWED_ORIGINS = new Set([
+  "https://www.shyft.lol",
+  "https://shyft.lol",
+  "http://localhost:3000",        // local dev
+  "http://localhost:3001",
+]);
+
+function isAllowedOrigin(request: NextRequest): boolean {
+  const origin = request.headers.get("origin") || "";
+  const referer = request.headers.get("referer") || "";
+  // Check origin header first (set on cross-origin requests)
+  if (origin && ALLOWED_ORIGINS.has(origin)) return true;
+  // Fallback: check referer starts with an allowed origin
+  for (const allowed of ALLOWED_ORIGINS) {
+    if (referer.startsWith(allowed)) return true;
+  }
+  // Same-origin requests from Next.js (server components) may have no origin/referer
+  // Allow if both are empty (internal server-side call)
+  if (!origin && !referer) return true;
+  return false;
+}
+
 /** POST — accepts a partially-signed tx (base64), adds treasury signature, sends it */
 export async function POST(request: NextRequest) {
   try {
+    // Block requests from unauthorized origins (other websites)
+    if (!isAllowedOrigin(request)) {
+      console.error(`🚨 BLOCKED: Unauthorized origin — origin: ${request.headers.get("origin")}, referer: ${request.headers.get("referer")}`);
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { transaction, walletAddress } = body;
 

@@ -9,8 +9,24 @@ import { NextRequest, NextResponse } from "next/server";
 
 const FREEIMAGE_API_KEY = process.env.FREEIMAGE_API_KEY || "6d207e02198a847aa98d0a2a901485a5";
 
+const ALLOWED_ORIGINS = new Set([
+  "https://www.shyft.lol",
+  "https://shyft.lol",
+  "http://localhost:3000",
+  "http://localhost:3001",
+]);
+
 export async function POST(request: NextRequest) {
   try {
+    const origin = request.headers.get("origin") || "";
+    const referer = request.headers.get("referer") || "";
+    const allowed = (origin && ALLOWED_ORIGINS.has(origin))
+      || [...ALLOWED_ORIGINS].some(o => referer.startsWith(o))
+      || (!origin && !referer);
+    if (!allowed) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     const formData = await request.formData();
     const file = formData.get("image") as File;
 

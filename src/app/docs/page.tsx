@@ -45,9 +45,6 @@ const SECTIONS = [
   { id: "encryption", label: "E2E Encryption" },
   { id: "creator-tokens", label: "Creator Tokens" },
   { id: "tech-stack", label: "Tech Stack" },
-  { id: "getting-started", label: "Getting Started" },
-  { id: "api-reference", label: "API Reference" },
-  { id: "project-structure", label: "Project Structure" },
   { id: "faq", label: "FAQ" },
 ];
 
@@ -309,10 +306,10 @@ export default function DocsPage() {
           </div>
           <CopyBlock language="text" text={`Frontend (Next.js 16 · React 19 · Tailwind CSS 4)
     ↓
-ShyftClient (src/lib/program.ts)
+Shyft Client Layer
     ↓                           ↓
-Treasury Sponsorship API    Bags SDK (Mainnet)
-  /api/sponsor-tx              Token launch, trade, earnings
+Treasury Sponsorship        Bags SDK (Mainnet)
+  Gasless signing              Token launch, trade, earnings
     ↓                           ↓
 Solana Devnet               Solana Mainnet
   Anchor Program               Bags Protocol`} />
@@ -452,7 +449,7 @@ Solana Devnet               Solana Mainnet
               { step: 2, color: "bg-[#2563EB]", text: "User takes an action (post, chat, follow, etc.)" },
               { step: 3, color: "bg-[#7C3AED]", text: "Frontend builds the transaction with feePayer = treasury" },
               { step: 4, color: "bg-[#7C3AED]", text: "User's wallet signs to prove identity (silent signing via Privy)" },
-              { step: 5, color: "bg-[#16A34A]", text: "Transaction is sent to /api/sponsor-tx where the treasury co-signs" },
+              { step: 5, color: "bg-[#16A34A]", text: "Transaction is sent to the treasury service where it is co-signed" },
               { step: 6, color: "bg-[#16A34A]", text: "Treasury pays both the gas fee (~0.000005 SOL) and account rent (~0.003 SOL)" },
             ].map(({ step, color, text }) => (
               <div key={step} className="flex items-start gap-3">
@@ -554,141 +551,6 @@ Solana Devnet               Solana Mainnet
               </tbody>
             </table>
           </div>
-
-          {/* ═══════════ GETTING STARTED ═══════════ */}
-          <SectionHeading id="getting-started" icon={Server}>Getting Started</SectionHeading>
-          <div className="mt-4 text-[#475569] leading-relaxed space-y-4 text-[13px]">
-            <h3 className="text-base font-semibold text-[#1A1A2E]">Prerequisites</h3>
-            <ul className="space-y-1.5 ml-4">
-              <li className="flex items-start gap-2"><span className="text-[#2563EB] mt-0.5">•</span>Node.js 18+</li>
-              <li className="flex items-start gap-2"><span className="text-[#2563EB] mt-0.5">•</span>Rust + Anchor CLI (for program development)</li>
-              <li className="flex items-start gap-2"><span className="text-[#2563EB] mt-0.5">•</span>Solana CLI</li>
-            </ul>
-          </div>
-
-          <h3 className="text-base font-semibold text-[#1A1A2E] mt-6 mb-2">Install &amp; Run</h3>
-          <CopyBlock text={`git clone https://github.com/chandm1213/Shyft.lol.git
-cd Shyft.lol
-npm install`} />
-
-          <h3 className="text-base font-semibold text-[#1A1A2E] mt-6 mb-2">Environment Variables</h3>
-          <p className="text-[13px] text-[#475569] mb-2">Create a <code className="bg-[#F1F5F9] px-1.5 py-0.5 rounded text-[12px] font-mono">.env.local</code> file in the project root:</p>
-          <CopyBlock language="env" text={`NEXT_PUBLIC_HELIUS_API_KEY=your_helius_key
-HELIUS_DEVNET_RPC=https://devnet.helius-rpc.com/?api-key=your_key
-TREASURY_PRIVATE_KEY=[your_treasury_keypair_bytes]
-NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id`} />
-
-          <h3 className="text-base font-semibold text-[#1A1A2E] mt-6 mb-2">Run Locally</h3>
-          <CopyBlock text="npm run dev" />
-
-          <h3 className="text-base font-semibold text-[#1A1A2E] mt-6 mb-2">Build &amp; Deploy the Solana Program</h3>
-          <CopyBlock text={`anchor build
-anchor deploy --provider.cluster devnet`} />
-
-          <h3 className="text-base font-semibold text-[#1A1A2E] mt-6 mb-2">Deploy to Vercel</h3>
-          <CopyBlock text="vercel --prod" />
-
-          {/* ═══════════ API REFERENCE ═══════════ */}
-          <SectionHeading id="api-reference" icon={FileCode2}>API Reference</SectionHeading>
-          <div className="mt-4 text-[#475569] leading-relaxed space-y-4 text-[13px]">
-            <p>Shyft exposes several internal API routes used by the frontend. These are Next.js API routes deployed alongside the app.</p>
-          </div>
-
-          <div className="overflow-x-auto my-4">
-            <table className="w-full border border-[#E2E8F0] rounded-xl overflow-hidden text-left">
-              <thead>
-                <TableRow header cells={["Route", "Method", "Description"]} />
-              </thead>
-              <tbody>
-                <TableRow cells={["/api/sponsor-tx", "POST", "Accepts a partially-signed transaction, co-signs with treasury, and submits to Solana. This is the core gasless mechanism."]} />
-                <TableRow cells={["/api/upload", "POST", "Handles image uploads for posts, avatars, and banners. Returns a public URL."]} />
-                <TableRow cells={["/api/bags?action=feed", "GET", "Fetches the token feed from the Bags SDK — all tokens launched through the platform."]} />
-                <TableRow cells={["/api/bags?action=fees", "GET", "Returns claimable fee positions for a given wallet address."]} />
-                <TableRow cells={["/api/bags (POST)", "POST", "Handles token launch, buy, sell, and claim operations via the Bags SDK."]} />
-              </tbody>
-            </table>
-          </div>
-
-          <h3 className="text-base font-semibold text-[#1A1A2E] mt-6 mb-3">Client Library — <code className="text-[14px] font-mono">ShyftClient</code></h3>
-          <div className="text-[13px] text-[#475569] leading-relaxed space-y-2">
-            <p>
-              The <code className="bg-[#F1F5F9] px-1.5 py-0.5 rounded text-[12px] font-mono">ShyftClient</code> class in <code className="bg-[#F1F5F9] px-1.5 py-0.5 rounded text-[12px] font-mono">src/lib/program.ts</code> wraps all Anchor program interactions. Key methods:
-            </p>
-          </div>
-
-          <div className="overflow-x-auto my-4">
-            <table className="w-full border border-[#E2E8F0] rounded-xl overflow-hidden text-left">
-              <thead>
-                <TableRow header cells={["Method", "Description"]} />
-              </thead>
-              <tbody>
-                <TableRow cells={["createProfile(username, displayName, bio, avatarUrl)", "Creates an on-chain profile PDA"]} />
-                <TableRow cells={["updateProfile(displayName, bio, avatarUrl, bannerUrl)", "Updates profile fields"]} />
-                <TableRow cells={["createPost(content)", "Publishes a post on-chain"]} />
-                <TableRow cells={["likePost(author, postId)", "Likes a post"]} />
-                <TableRow cells={["createComment(author, postId, commentIndex, content)", "Comments on a post"]} />
-                <TableRow cells={["reactToPost(author, postId, reactionType)", "Reacts with emoji (0-5)"]} />
-                <TableRow cells={["followUser(target) / unfollowUser(target)", "Follow / unfollow a user"]} />
-                <TableRow cells={["createChat(chatId, peer)", "Initialize an encrypted chat channel"]} />
-                <TableRow cells={["sendMessage(chatId, content, messageIndex)", "Send a message in a chat"]} />
-                <TableRow cells={["getDecryptedMessages(chatId, myAddr, secretKey, peerKey)", "Fetch and decrypt all messages in a chat"]} />
-                <TableRow cells={["getAllProfiles() / getAllPosts()", "Fetch all on-chain profiles or posts"]} />
-                <TableRow cells={["getFollowing(pubkey) / getFollowers(pubkey)", "Get follow lists for a user"]} />
-              </tbody>
-            </table>
-          </div>
-
-          {/* ═══════════ PROJECT STRUCTURE ═══════════ */}
-          <SectionHeading id="project-structure" icon={Database}>Project Structure</SectionHeading>
-          <CopyBlock language="text" text={`├── programs/shadowspace/       Anchor / Rust on-chain program
-│   └── src/lib.rs              All instructions and account structs
-├── src/
-│   ├── app/                    Next.js app router
-│   │   ├── page.tsx            Main app shell (feed, chat, profile tabs)
-│   │   ├── docs/page.tsx       This documentation page
-│   │   └── api/                Server-side API routes
-│   │       ├── sponsor-tx/     Treasury co-signing endpoint
-│   │       ├── upload/         Image upload endpoint
-│   │       └── bags/           Bags SDK proxy (launch, trade, fees)
-│   ├── components/             React components
-│   │   ├── Feed.tsx            On-chain post feed with likes, comments, reactions
-│   │   ├── Chat.tsx            E2E encrypted messaging
-│   │   ├── Profile.tsx         User profile with posts, wallet, editing
-│   │   ├── Tokens.tsx          Creator token discovery, portfolio, earnings
-│   │   ├── TokenLaunch.tsx     Token creation flow
-│   │   ├── TokenTrade.tsx      Buy / sell token interface
-│   │   ├── Payments.tsx        SOL payments interface
-│   │   ├── Friends.tsx         Follow / follower list
-│   │   ├── CreatorDashboard.tsx Analytics dashboard
-│   │   ├── Sidebar.tsx         Desktop navigation
-│   │   ├── MobileNav.tsx       Mobile bottom tab bar
-│   │   ├── Header.tsx          Top bar with search
-│   │   ├── Landing.tsx         Public landing page
-│   │   ├── ProfileSetup.tsx    First-time profile creation
-│   │   ├── OnboardingDemo.tsx  Interactive onboarding flow
-│   │   ├── RichContent.tsx     Media embeds, GIFs, image upload
-│   │   └── ProfileHoverCard.tsx Hover cards for user profiles
-│   ├── contexts/
-│   │   └── WalletProvider.tsx  Privy wallet context
-│   ├── hooks/
-│   │   ├── useProgram.ts       Anchor program hook
-│   │   ├── usePrivyWallet.ts   Privy wallet abstraction
-│   │   ├── usePrivatePayment.ts SOL payment hook
-│   │   └── useNotifications.ts Notification system hook
-│   ├── lib/
-│   │   ├── program.ts          ShyftClient — all on-chain interactions
-│   │   ├── encryption.ts       NaCl Box E2E encryption utilities
-│   │   ├── bags.ts             Bags SDK wrapper (launch, trade, earnings)
-│   │   ├── store.ts            Zustand global state
-│   │   └── idl.json            Anchor IDL (program interface definition)
-│   └── types/
-│       ├── index.ts            App-level TypeScript types
-│       └── shadowspace.ts      On-chain program types
-├── target/
-│   ├── deploy/                 Compiled .so and keypair
-│   ├── idl/                    Generated IDL
-│   └── types/                  Generated TypeScript types
-└── public/                     Static assets (logo, favicon, etc.)`} />
 
           {/* ═══════════ FAQ ═══════════ */}
           <SectionHeading id="faq" icon={MessageCircle}>Frequently Asked Questions</SectionHeading>
