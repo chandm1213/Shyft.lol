@@ -13,6 +13,32 @@ import { checkUsername } from "./reserved-usernames";
 
 const PROGRAM_ID = new PublicKey("EEnouVLAoQGMEbrypEhP3Ct5RgCViCWG4n1nCZNwMxjQ");
 
+// ========== IPFS URL Helpers ==========
+// On-chain fields are limited to 128 bytes. Full IPFS URLs can be 130+ chars.
+// We store only the CID on-chain and reconstruct the full URL client-side.
+const IPFS_GATEWAY = "gateway.pinata.cloud";
+const IPFS_CID_REGEX = /\/ipfs\/([a-zA-Z0-9]+)(?:\/[^?#]*)?(\?.*)?$/;
+
+/** Strip a full IPFS URL down to just the CID (for on-chain storage). */
+function compressIpfsUrl(url: string): string {
+  if (!url) return url;
+  const match = url.match(IPFS_CID_REGEX);
+  if (match) return match[1]; // just the CID
+  return url; // not an IPFS URL — store as-is
+}
+
+/** Expand a bare CID back to a full IPFS gateway URL. */
+function expandIpfsUrl(stored: string): string {
+  if (!stored) return stored;
+  // Already a full URL — return as-is
+  if (stored.startsWith("http")) return stored;
+  // Looks like a bare CID (bafkrei... or Qm...)
+  if (stored.startsWith("baf") || stored.startsWith("Qm")) {
+    return `https://${IPFS_GATEWAY}/ipfs/${stored}`;
+  }
+  return stored;
+}
+
 const PROFILE_SEED = Buffer.from("profile");
 const POST_SEED = Buffer.from("post");
 const CHAT_SEED = Buffer.from("chat");
@@ -252,7 +278,13 @@ export class ShyftClient {
   async getProfile(owner: PublicKey): Promise<any> {
     const [profilePda] = getProfilePda(owner);
     try {
-      return await this.accounts.profile.fetch(profilePda);
+      const profile = await this.accounts.profile.fetch(profilePda);
+      // Expand bare CIDs back to full IPFS gateway URLs
+      if (profile) {
+        profile.avatarUrl = expandIpfsUrl(profile.avatarUrl || "");
+        profile.bannerUrl = expandIpfsUrl(profile.bannerUrl || "");
+      }
+      return profile;
     } catch (err: any) {
       // Check if account exists but can't be deserialized (size mismatch)
       try {
@@ -303,8 +335,12 @@ export class ShyftClient {
       console.warn("Migration check failed, continuing:", e);
     }
 
+    // Compress IPFS URLs to bare CIDs for on-chain storage (128 byte limit)
+    const compressedAvatar = compressIpfsUrl(avatarUrl);
+    const compressedBanner = compressIpfsUrl(bannerUrl);
+
     const ix = await this.program.methods
-      .updateProfile(displayName, bio, avatarUrl, bannerUrl)
+      .updateProfile(displayName, bio, compressedAvatar, compressedBanner)
       .accounts({
         profile: profilePda,
         user,
@@ -489,6 +525,8 @@ export class ShyftClient {
           publicKey: p.publicKey.toBase58(),
           ...p.account,
           owner: p.account.owner.toBase58(),
+          avatarUrl: expandIpfsUrl(p.account.avatarUrl || ""),
+          bannerUrl: expandIpfsUrl(p.account.bannerUrl || ""),
         }));
       } catch {
         console.warn("⚠️ getAllProfiles via Anchor failed, using raw fetch");
