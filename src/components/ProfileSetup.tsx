@@ -88,7 +88,8 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
       const sig = await program.createProfile(
         username.trim(),
         displayName.trim(),
-        bio.trim() || "Building on Shyft"
+        bio.trim() || "Building on Shyft",
+        inviteCode || undefined
       );
       toast("success", "Profile created on Solana!", `TX: ${sig.slice(0, 8)}...`);
 

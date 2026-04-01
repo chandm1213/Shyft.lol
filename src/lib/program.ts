@@ -182,12 +182,12 @@ export class ShyftClient {
 
   // ========== PROFILE ==========
 
-  async createProfile(username: string, displayName: string, bio: string): Promise<string> {
+  async createProfile(username: string, displayName: string, bio: string, inviteCode?: string): Promise<string> {
     const user = this.provider.wallet.publicKey;
     const [profilePda] = getProfilePda(user);
 
     // Block reserved/squatted usernames
-    const reserved = checkUsername(username);
+    const reserved = checkUsername(username, inviteCode);
     if (reserved.blocked) {
       throw new Error(reserved.reason || "This username is reserved");
     }
