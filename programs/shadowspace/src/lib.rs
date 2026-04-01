@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use session_keys::{Session, SessionToken, session_auth_or};
 
 declare_id!("EEnouVLAoQGMEbrypEhP3Ct5RgCViCWG4n1nCZNwMxjQ");
 
@@ -14,7 +13,6 @@ pub const REACTION_SEED: &[u8] = b"reaction";
 #[program]
 pub mod shadowspace {
     use super::*;
-    use session_keys::SessionError;
 
     // ========== PROFILE ==========
 
@@ -72,10 +70,6 @@ pub mod shadowspace {
 
     // ========== POSTS ==========
 
-    #[session_auth_or(
-        ctx.accounts.author.key() == ctx.accounts.author.key(),
-        ShadowError::Unauthorized
-    )]
     pub fn create_post(
         ctx: Context<CreatePost>,
         post_id: u64,
@@ -97,10 +91,6 @@ pub mod shadowspace {
         Ok(())
     }
 
-    #[session_auth_or(
-        ctx.accounts.user.key() == ctx.accounts.user.key(),
-        ShadowError::Unauthorized
-    )]
     pub fn like_post(ctx: Context<LikePost>, _post_id: u64) -> Result<()> {
         let post = &mut ctx.accounts.post;
         post.likes += 1;
@@ -108,10 +98,6 @@ pub mod shadowspace {
         Ok(())
     }
 
-    #[session_auth_or(
-        ctx.accounts.author.key() == ctx.accounts.author.key(),
-        ShadowError::Unauthorized
-    )]
     pub fn create_comment(
         ctx: Context<CreateComment>,
         _post_id: u64,
@@ -131,10 +117,6 @@ pub mod shadowspace {
         Ok(())
     }
 
-    #[session_auth_or(
-        ctx.accounts.user.key() == ctx.accounts.user.key(),
-        ShadowError::Unauthorized
-    )]
     pub fn react_to_post(
         ctx: Context<ReactToPost>,
         _post_id: u64,
@@ -332,14 +314,6 @@ pub struct CreatePost<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
-    pub session_token: Option<Account<'info, SessionToken>>,
-}
-
-impl<'info> Session<'info> for CreatePost<'info> {
-    fn session_token(&self) -> Option<Account<'info, SessionToken>> { self.session_token.clone() }
-    fn session_signer(&self) -> Signer<'info> { self.author.clone() }
-    fn session_authority(&self) -> Pubkey { self.profile.owner }
-    fn target_program(&self) -> Pubkey { crate::ID }
 }
 
 #[derive(Accounts)]
@@ -347,18 +321,9 @@ impl<'info> Session<'info> for CreatePost<'info> {
 pub struct LikePost<'info> {
     #[account(mut, seeds = [POST_SEED, post.author.as_ref(), &post_id.to_le_bytes()], bump)]
     pub post: Account<'info, Post>,
-    /// The user's profile — used to resolve real wallet for session keys
     #[account(seeds = [PROFILE_SEED, profile.owner.as_ref()], bump)]
     pub profile: Account<'info, Profile>,
     pub user: Signer<'info>,
-    pub session_token: Option<Account<'info, SessionToken>>,
-}
-
-impl<'info> Session<'info> for LikePost<'info> {
-    fn session_token(&self) -> Option<Account<'info, SessionToken>> { self.session_token.clone() }
-    fn session_signer(&self) -> Signer<'info> { self.user.clone() }
-    fn session_authority(&self) -> Pubkey { self.profile.owner }
-    fn target_program(&self) -> Pubkey { crate::ID }
 }
 
 #[derive(Accounts)]
@@ -368,7 +333,6 @@ pub struct CreateComment<'info> {
     pub comment: Account<'info, Comment>,
     #[account(mut, seeds = [POST_SEED, post.author.as_ref(), &post_id.to_le_bytes()], bump)]
     pub post: Account<'info, Post>,
-    /// The commenter's profile — used to resolve real wallet for session keys
     #[account(seeds = [PROFILE_SEED, commenter_profile.owner.as_ref()], bump)]
     pub commenter_profile: Account<'info, Profile>,
     #[account(mut)]
@@ -376,14 +340,6 @@ pub struct CreateComment<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
-    pub session_token: Option<Account<'info, SessionToken>>,
-}
-
-impl<'info> Session<'info> for CreateComment<'info> {
-    fn session_token(&self) -> Option<Account<'info, SessionToken>> { self.session_token.clone() }
-    fn session_signer(&self) -> Signer<'info> { self.author.clone() }
-    fn session_authority(&self) -> Pubkey { self.commenter_profile.owner }
-    fn target_program(&self) -> Pubkey { crate::ID }
 }
 
 #[derive(Accounts)]
@@ -393,7 +349,6 @@ pub struct ReactToPost<'info> {
     pub reaction: Account<'info, Reaction>,
     #[account(seeds = [POST_SEED, post.author.as_ref(), &post_id.to_le_bytes()], bump)]
     pub post: Account<'info, Post>,
-    /// The reactor's profile — used to resolve real wallet for session keys + reaction PDA
     #[account(seeds = [PROFILE_SEED, reactor_profile.owner.as_ref()], bump)]
     pub reactor_profile: Account<'info, Profile>,
     #[account(mut)]
@@ -401,14 +356,6 @@ pub struct ReactToPost<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
-    pub session_token: Option<Account<'info, SessionToken>>,
-}
-
-impl<'info> Session<'info> for ReactToPost<'info> {
-    fn session_token(&self) -> Option<Account<'info, SessionToken>> { self.session_token.clone() }
-    fn session_signer(&self) -> Signer<'info> { self.user.clone() }
-    fn session_authority(&self) -> Pubkey { self.reactor_profile.owner }
-    fn target_program(&self) -> Pubkey { crate::ID }
 }
 
 #[derive(Accounts)]

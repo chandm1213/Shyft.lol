@@ -334,7 +334,6 @@ export class ShyftClient {
           author: wallet,
           payer: treasury,
           systemProgram: SystemProgram.programId,
-          sessionToken: null as any,
         })
         .instruction();
 
@@ -502,7 +501,6 @@ export class ShyftClient {
         post: postPda,
         profile: profilePda,
         user: wallet,
-        sessionToken: null as any,
       })
       .instruction();
 
@@ -533,7 +531,6 @@ export class ShyftClient {
         author: wallet,
         payer: treasury,
         systemProgram: SystemProgram.programId,
-        sessionToken: null as any,
       })
       .instruction();
 
@@ -627,7 +624,6 @@ export class ShyftClient {
         user: wallet,
         payer: treasury,
         systemProgram: SystemProgram.programId,
-        sessionToken: null as any,
       })
       .instruction();
 

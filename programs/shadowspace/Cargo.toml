@@ -21,5 +21,4 @@ anchor-debug = []
 
 [dependencies]
 anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
-session-keys = { version = "3.0.10", features = ["no-entrypoint"] }
 blake3 = "=1.5.5"

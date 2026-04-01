@@ -619,9 +619,6 @@
         },
         {
           "name": "commenter_profile",
-          "docs": [
-            "The commenter's profile — used to resolve real wallet for session keys"
-          ],
           "pda": {
             "seeds": [
               {
@@ -657,10 +654,6 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "session_token",
-          "optional": true
         }
       ],
       "args": [
@@ -755,10 +748,6 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "session_token",
-          "optional": true
         }
       ],
       "args": [
@@ -998,9 +987,6 @@
         },
         {
           "name": "profile",
-          "docs": [
-            "The user's profile — used to resolve real wallet for session keys"
-          ],
           "pda": {
             "seeds": [
               {
@@ -1026,10 +1012,6 @@
         {
           "name": "user",
           "signer": true
-        },
-        {
-          "name": "session_token",
-          "optional": true
         }
       ],
       "args": [
@@ -1162,9 +1144,6 @@
         },
         {
           "name": "reactor_profile",
-          "docs": [
-            "The reactor's profile — used to resolve real wallet for session keys + reaction PDA"
-          ],
           "pda": {
             "seeds": [
               {
@@ -1200,10 +1179,6 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "session_token",
-          "optional": true
         }
       ],
       "args": [
@@ -1584,19 +1559,6 @@
         142,
         139
       ]
-    },
-    {
-      "name": "SessionToken",
-      "discriminator": [
-        233,
-        4,
-        115,
-        14,
-        46,
-        21,
-        1,
-        15
-      ]
     }
   ],
   "errors": [
@@ -1844,30 +1806,6 @@
           {
             "name": "reaction_type",
             "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "SessionToken",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "authority",
-            "type": "pubkey"
-          },
-          {
-            "name": "target_program",
-            "type": "pubkey"
-          },
-          {
-            "name": "session_signer",
-            "type": "pubkey"
-          },
-          {
-            "name": "valid_until",
-            "type": "i64"
           }
         ]
       }

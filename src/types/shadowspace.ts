@@ -625,9 +625,6 @@ export type Shadowspace = {
         },
         {
           "name": "commenterProfile",
-          "docs": [
-            "The commenter's profile — used to resolve real wallet for session keys"
-          ],
           "pda": {
             "seeds": [
               {
@@ -663,10 +660,6 @@ export type Shadowspace = {
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "sessionToken",
-          "optional": true
         }
       ],
       "args": [
@@ -761,10 +754,6 @@ export type Shadowspace = {
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "sessionToken",
-          "optional": true
         }
       ],
       "args": [
@@ -1004,9 +993,6 @@ export type Shadowspace = {
         },
         {
           "name": "profile",
-          "docs": [
-            "The user's profile — used to resolve real wallet for session keys"
-          ],
           "pda": {
             "seeds": [
               {
@@ -1032,10 +1018,6 @@ export type Shadowspace = {
         {
           "name": "user",
           "signer": true
-        },
-        {
-          "name": "sessionToken",
-          "optional": true
         }
       ],
       "args": [
@@ -1168,9 +1150,6 @@ export type Shadowspace = {
         },
         {
           "name": "reactorProfile",
-          "docs": [
-            "The reactor's profile — used to resolve real wallet for session keys + reaction PDA"
-          ],
           "pda": {
             "seeds": [
               {
@@ -1206,10 +1185,6 @@ export type Shadowspace = {
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "sessionToken",
-          "optional": true
         }
       ],
       "args": [
@@ -1590,19 +1565,6 @@ export type Shadowspace = {
         142,
         139
       ]
-    },
-    {
-      "name": "sessionToken",
-      "discriminator": [
-        233,
-        4,
-        115,
-        14,
-        46,
-        21,
-        1,
-        15
-      ]
     }
   ],
   "errors": [
@@ -1850,30 +1812,6 @@ export type Shadowspace = {
           {
             "name": "reactionType",
             "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "sessionToken",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "authority",
-            "type": "pubkey"
-          },
-          {
-            "name": "targetProgram",
-            "type": "pubkey"
-          },
-          {
-            "name": "sessionSigner",
-            "type": "pubkey"
-          },
-          {
-            "name": "validUntil",
-            "type": "i64"
           }
         ]
       }
