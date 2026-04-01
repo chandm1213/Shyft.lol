@@ -118,6 +118,9 @@ export async function getTreasuryPubkey(): Promise<PublicKey> {
  * The tx must have feePayer = treasury. The user/session key signs first, then backend adds treasury sig.
  */
 export async function sponsorTransaction(tx: Transaction, walletAddress: string): Promise<string> {
+  // Debug: log all program IDs in the transaction before sending
+  console.log("📋 sponsor-tx: programs in transaction:", tx.instructions.map(ix => ix.programId.toBase58()));
+
   const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
   const res = await fetch("/api/sponsor-tx", {
     method: "POST",
@@ -128,7 +131,10 @@ export async function sponsorTransaction(tx: Transaction, walletAddress: string)
     }),
   });
   const data = await res.json();
-  if (!data.success) throw new Error(data.error || "Sponsor transaction failed");
+  if (!data.success) {
+    console.error("❌ sponsor-tx failed:", data.error);
+    throw new Error(data.error || "Sponsor transaction failed");
+  }
   return data.signature;
 }
 

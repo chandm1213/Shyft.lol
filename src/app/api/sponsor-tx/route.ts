@@ -179,6 +179,10 @@ export async function POST(request: NextRequest) {
     // This prevents attackers from crafting SOL transfer instructions
     // that would drain the treasury.
     // ──────────────────────────────────────────────────────────────
+    // Log ALL program IDs for debugging
+    const allProgramIds = tx.instructions.map((ix: any) => ix.programId.toBase58());
+    console.log(`📋 Transaction from ${walletAddress} contains programs:`, allProgramIds);
+
     for (const ix of tx.instructions) {
       const programId = ix.programId.toBase58();
 
@@ -186,8 +190,9 @@ export async function POST(request: NextRequest) {
         console.error(
           `🚨 BLOCKED: Wallet ${walletAddress} tried to call unauthorized program: ${programId}`
         );
+        console.error(`🚨 All programs in tx:`, allProgramIds);
         return NextResponse.json(
-          { error: "Transaction contains unauthorized program call" },
+          { error: `Transaction contains unauthorized program call: ${programId}` },
           { status: 403 }
         );
       }
