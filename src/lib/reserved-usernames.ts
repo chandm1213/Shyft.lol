@@ -53,8 +53,8 @@ interface InviteEntry {
 }
 
 const INVITE_CODES: InviteEntry[] = [
-  // Example:
-  // { username: "solana", code: "SOL-SHYFT-9X2K" },
+  { username: "bitcoin", code: "BTC-SHYFT-2026" },
+  // Add more: { username: "solana", code: "SOL-SHYFT-9X2K" },
 ];
 
 // ─── Minimum username length ───

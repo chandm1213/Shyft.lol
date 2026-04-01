@@ -30,6 +30,12 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
   const [showInviteInput, setShowInviteInput] = useState(false);
   const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Reset invite state when username changes
+  useEffect(() => {
+    setShowInviteInput(false);
+    setInviteCode("");
+  }, [username]);
+
   // Debounced username availability check
   useEffect(() => {
     if (usernameTimer.current) clearTimeout(usernameTimer.current);
@@ -38,8 +44,6 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
     setUsernameReserved(false);
     setReservedNeedsCode(false);
     setReservedReason("");
-    setShowInviteInput(false);
-    setInviteCode("");
     if (!username.trim() || username.trim().length < 2 || !program) return;
 
     // Check reserved list first (instant, no RPC)
