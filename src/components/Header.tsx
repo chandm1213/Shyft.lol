@@ -155,7 +155,7 @@ export default function Header() {
       <header className="relative z-10 bg-white border-b border-[#E2E8F0]">
         <div className="flex items-center justify-between px-3 sm:px-4 md:px-8 py-2.5 sm:py-3">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <img src="/shyftlogo.png" alt="Shyft" className="shyft-logo md:hidden w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0" />
+            <img src="/shyftlogo.png" alt="Shyft" className="shyft-logo md:hidden w-11 h-11 sm:w-12 sm:h-12 flex-shrink-0" />
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-bold text-[#1A1A2E] truncate">{titles[activeTab] || "Feed"}</h2>
               <p className="text-[10px] sm:text-xs text-[#64748B] truncate">

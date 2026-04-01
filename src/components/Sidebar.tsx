@@ -26,7 +26,7 @@ export default function Sidebar() {
     <aside className="hidden md:flex flex-col w-64 h-screen bg-white border-r border-[#E2E8F0] fixed left-0 top-0 z-30">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-[#E2E8F0]">
-        <img src="/shyftlogo.png" alt="Shyft" className="shyft-logo w-12 h-12" />
+        <img src="/shyftlogo.png" alt="Shyft" className="shyft-logo w-16 h-16" />
         <div>
           <h1 className="text-lg font-bold text-[#1A1A2E]">Shyft</h1>
           <p className="text-xs text-[#64748B]">On-Chain Social</p>
