@@ -77,7 +77,7 @@ export default function Landing() {
       {/* Nav */}
       <nav className="flex items-center justify-between px-4 sm:px-6 md:px-12 py-3 sm:py-4 border-b border-[#E2E8F0] bg-white/80 backdrop-blur-lg sticky top-0 z-50">
         <div className="flex items-center gap-2 sm:gap-3">
-          <img src="/shyft-icon.svg" alt="Shyft" className="w-10 h-10 sm:w-12 sm:h-12" />
+          <img src="/shyftlogo.png" alt="Shyft" className="w-10 h-10 sm:w-12 sm:h-12" />
           <div>
             <h1 className="text-base sm:text-lg font-bold text-[#1A1A2E]">Shyft</h1>
             <p className="text-[9px] sm:text-[10px] text-[#64748B] -mt-0.5">On-Chain Social</p>
@@ -407,7 +407,7 @@ export default function Landing() {
 
       {/* Final CTA */}
       <div className="px-4 sm:px-6 md:px-12 py-12 sm:py-16 text-center bg-white border-t border-[#E2E8F0]">
-        <img src="/shyft-icon.svg" alt="Shyft" className="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-5 sm:mb-6" />
+        <img src="/shyftlogo.png" alt="Shyft" className="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-5 sm:mb-6" />
         <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#1A1A2E] mb-3">Ready to own your social?</h3>
         <p className="text-xs sm:text-sm text-[#64748B] mb-6 sm:mb-8 max-w-md mx-auto">Sign in with email, Google, Twitter, or your Solana wallet — and start using the first fully on-chain social platform.</p>
         <button
@@ -426,7 +426,7 @@ export default function Landing() {
       <footer className="px-4 sm:px-6 md:px-12 py-5 sm:py-6 border-t border-[#E2E8F0] bg-[#F8FAFC]">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 max-w-5xl mx-auto">
           <div className="flex items-center gap-2">
-            <img src="/shyft-icon.svg" alt="Shyft" className="w-6 h-6" />
+            <img src="/shyftlogo.png" alt="Shyft" className="w-6 h-6" />
             <span className="text-xs font-semibold text-[#64748B]">Shyft</span>
           </div>
           <div className="flex items-center gap-4">
