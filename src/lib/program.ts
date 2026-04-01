@@ -9,6 +9,7 @@ import {
   isEncryptedMessage,
   isPubkeyMessage,
 } from "./encryption";
+import { checkUsername } from "./reserved-usernames";
 
 const PROGRAM_ID = new PublicKey("EEnouVLAoQGMEbrypEhP3Ct5RgCViCWG4n1nCZNwMxjQ");
 
@@ -184,6 +185,12 @@ export class ShyftClient {
   async createProfile(username: string, displayName: string, bio: string): Promise<string> {
     const user = this.provider.wallet.publicKey;
     const [profilePda] = getProfilePda(user);
+
+    // Block reserved/squatted usernames
+    const reserved = checkUsername(username);
+    if (reserved.blocked) {
+      throw new Error(reserved.reason || "This username is reserved");
+    }
 
     // Try to migrate first if existing profile is undersized
     try {

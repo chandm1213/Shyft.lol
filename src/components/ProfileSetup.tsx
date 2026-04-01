@@ -6,6 +6,7 @@ import { useProgram } from "@/hooks/useProgram";
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
 import { useWallet } from "@/hooks/usePrivyWallet";
+import { checkUsername } from "@/lib/reserved-usernames";
 
 interface ProfileSetupProps {
   onComplete: () => void;
@@ -22,6 +23,11 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameTaken, setUsernameTaken] = useState(false);
   const [usernameChecked, setUsernameChecked] = useState(false);
+  const [usernameReserved, setUsernameReserved] = useState(false);
+  const [reservedNeedsCode, setReservedNeedsCode] = useState(false);
+  const [reservedReason, setReservedReason] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [showInviteInput, setShowInviteInput] = useState(false);
   const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounced username availability check
@@ -29,7 +35,24 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
     if (usernameTimer.current) clearTimeout(usernameTimer.current);
     setUsernameChecked(false);
     setUsernameTaken(false);
+    setUsernameReserved(false);
+    setReservedNeedsCode(false);
+    setReservedReason("");
+    setShowInviteInput(false);
+    setInviteCode("");
     if (!username.trim() || username.trim().length < 2 || !program) return;
+
+    // Check reserved list first (instant, no RPC)
+    const reserved = checkUsername(username.trim(), inviteCode || undefined);
+    if (reserved.blocked) {
+      setUsernameReserved(true);
+      setReservedNeedsCode(!!reserved.needsCode);
+      setReservedReason(reserved.reason || "This username is reserved");
+      setCheckingUsername(false);
+      setUsernameChecked(true);
+      return;
+    }
+
     setCheckingUsername(true);
     usernameTimer.current = setTimeout(async () => {
       try {
@@ -42,7 +65,7 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
       setCheckingUsername(false);
     }, 500);
     return () => { if (usernameTimer.current) clearTimeout(usernameTimer.current); };
-  }, [username, program, publicKey]);
+  }, [username, program, publicKey, inviteCode]);
 
   // No wallet funding needed — treasury sponsors all transactions directly
 
@@ -50,6 +73,10 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
     if (!program || !publicKey || !username.trim() || !displayName.trim()) return;
     if (usernameTaken) {
       toast("error", "Username taken", "Try a different username");
+      return;
+    }
+    if (usernameReserved) {
+      toast("error", "Username reserved", reservedReason || "This username is reserved");
       return;
     }
     setLoading(true);
@@ -131,11 +158,35 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
               }`}
             />
             {username.trim().length >= 2 && (
-              <div className="flex items-center gap-1 mt-1">
+              <div className="mt-1 space-y-1.5">
                 {checkingUsername ? (
                   <span className="text-[11px] text-[#94A3B8]">Checking...</span>
                 ) : usernameChecked ? (
-                  usernameTaken ? (
+                  usernameReserved ? (
+                    <div>
+                      <span className="text-[11px] text-amber-600 flex items-center gap-1">
+                        <XCircle className="w-3 h-3" /> {reservedReason}
+                      </span>
+                      {reservedNeedsCode && !showInviteInput && (
+                        <button
+                          type="button"
+                          onClick={() => setShowInviteInput(true)}
+                          className="text-[11px] text-[#2563EB] hover:underline mt-0.5"
+                        >
+                          Have an invite code?
+                        </button>
+                      )}
+                      {showInviteInput && (
+                        <input
+                          type="text"
+                          value={inviteCode}
+                          onChange={(e) => setInviteCode(e.target.value.toUpperCase().trim())}
+                          placeholder="Enter invite code"
+                          className="w-full mt-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+                        />
+                      )}
+                    </div>
+                  ) : usernameTaken ? (
                     <span className="text-[11px] text-red-500 flex items-center gap-1">
                       <XCircle className="w-3 h-3" /> Username taken
                     </span>
@@ -179,7 +230,7 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
 
           <button
             onClick={handleCreate}
-            disabled={!username.trim() || !displayName.trim() || loading || usernameTaken || checkingUsername}
+            disabled={!username.trim() || !displayName.trim() || loading || usernameTaken || usernameReserved || checkingUsername}
             className="w-full py-3 bg-gradient-to-r from-[#2563EB] to-[#16A34A] text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
           >
             {loading ? (
