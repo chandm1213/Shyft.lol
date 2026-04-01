@@ -389,7 +389,11 @@ export class ShyftClient {
       const [profilePda] = getProfilePda(wallet);
       const [postPda] = getPostPda(wallet, postId);
 
-      const ix = await this.program.methods
+      // Get rent amount before closing so we can refund treasury
+      const postAccount = await this.provider.connection.getAccountInfo(postPda);
+      const rentLamports = postAccount?.lamports || 0;
+
+      const closeIx = await this.program.methods
         .closePost(new BN(postId))
         .accountsPartial({
           post: postPda,
@@ -398,13 +402,20 @@ export class ShyftClient {
         })
         .instruction();
 
-      const tx = new Transaction().add(ix);
+      // Return rent to treasury (close sends it to user, so we transfer it back)
+      const refundIx = SystemProgram.transfer({
+        fromPubkey: wallet,
+        toPubkey: treasury,
+        lamports: rentLamports,
+      });
+
+      const tx = new Transaction().add(closeIx).add(refundIx);
       tx.feePayer = treasury;
       tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
       const signed = await this.provider.wallet.signTransaction(tx);
       const sig = await sponsorTransaction(signed, wallet.toBase58());
 
-      console.log("Post deleted (treasury sponsored):", sig);
+      console.log("Post deleted (treasury sponsored, rent refunded):", sig);
       rpcCache.invalidate("allPosts");
       return sig;
     } catch (err: any) {
@@ -569,7 +580,11 @@ export class ShyftClient {
     const [postPda] = getPostPda(postAuthor, postId);
     const [commentPda] = getCommentPda(postPda, commentIndex);
 
-    const ix = await this.program.methods
+    // Get rent amount before closing so we can refund treasury
+    const commentAccount = await this.provider.connection.getAccountInfo(commentPda);
+    const rentLamports = commentAccount?.lamports || 0;
+
+    const closeIx = await this.program.methods
       .closeComment(new BN(postId), new BN(commentIndex))
       .accountsPartial({
         comment: commentPda,
@@ -578,13 +593,20 @@ export class ShyftClient {
       })
       .instruction();
 
-    const tx = new Transaction().add(ix);
+    // Return rent to treasury
+    const refundIx = SystemProgram.transfer({
+      fromPubkey: wallet,
+      toPubkey: treasury,
+      lamports: rentLamports,
+    });
+
+    const tx = new Transaction().add(closeIx).add(refundIx);
     tx.feePayer = treasury;
     tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
     const signed = await this.provider.wallet.signTransaction(tx);
     const sig = await sponsorTransaction(signed, wallet.toBase58());
 
-    console.log("Comment deleted (treasury sponsored):", sig);
+    console.log("Comment deleted (treasury sponsored, rent refunded):", sig);
     rpcCache.invalidate("allComments");
     rpcCache.invalidate("allPosts");
     return sig;
