@@ -15,8 +15,12 @@ const URL_REGEX = /https?:\/\/[^\s<]+[^\s<.,;:!?"')\]]/gi;
 /* ── Image extensions ── */
 const IMAGE_EXTS = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i;
 
-/* ── IPFS URLs (Pinata, etc.) — treat as images ── */
-const IPFS_IMAGE_URL = /\.mypinata\.cloud\/ipfs\/|ipfs\.io\/ipfs\/|cloudflare-ipfs\.com\/ipfs\//i;
+/* ── IPFS URLs (Pinata, etc.) ── */
+const IPFS_URL = /\.mypinata\.cloud\/ipfs\/|ipfs\.io\/ipfs\/|cloudflare-ipfs\.com\/ipfs\//i;
+/** IPFS URLs that are NOT videos — treat as images */
+const IPFS_IMAGE_URL = { test: (u: string) => IPFS_URL.test(u) && !VIDEO_EXTS.test(u) };
+/** IPFS URLs that ARE videos */
+const IPFS_VIDEO_URL = { test: (u: string) => IPFS_URL.test(u) && VIDEO_EXTS.test(u) };
 
 /* ── Video extensions ── */
 const VIDEO_EXTS = /\.(mp4|webm|ogg|mov)(\?.*)?$/i;
@@ -35,7 +39,7 @@ interface RichContentProps {
 export function RichContent({ content, className = "" }: RichContentProps) {
   const urls = content.match(URL_REGEX) || [];
   const imageUrls = urls.filter((u) => IMAGE_EXTS.test(u) || GIF_DOMAINS.test(u) || IPFS_IMAGE_URL.test(u));
-  const videoUrls = urls.filter((u) => VIDEO_EXTS.test(u));
+  const videoUrls = urls.filter((u) => VIDEO_EXTS.test(u) || IPFS_VIDEO_URL.test(u));
   const youtubeUrls = urls.map((u) => ({ url: u, match: u.match(YOUTUBE_REGEX) })).filter((x) => x.match);
   const linkUrls = urls.filter(
     (u) => !IMAGE_EXTS.test(u) && !VIDEO_EXTS.test(u) && !YOUTUBE_REGEX.test(u) && !IPFS_IMAGE_URL.test(u)
@@ -56,8 +60,8 @@ export function RichContent({ content, className = "" }: RichContentProps) {
         parts.push(content.slice(lastIndex, idx));
       }
 
-      // If it's an image URL, don't show it inline as text (we'll show the image below)
-      if (IMAGE_EXTS.test(url) || IPFS_IMAGE_URL.test(url)) {
+      // If it's an image/video URL, don't show it inline as text (we'll show the media below)
+      if (IMAGE_EXTS.test(url) || IPFS_IMAGE_URL.test(url) || VIDEO_EXTS.test(url) || IPFS_VIDEO_URL.test(url)) {
         lastIndex = idx + url.length;
         continue;
       }
@@ -246,20 +250,27 @@ function LinkPreview({ url }: { url: string }) {
   );
 }
 
-/* ═══ Image Upload — uploads to /api/upload (freeimage.host) ═══ */
+/* ═══ Media Upload — uploads images & videos to /api/upload (Pinata IPFS) ═══ */
 
-export async function uploadImage(file: File): Promise<string> {
-  // Validate
-  const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-  if (!validTypes.includes(file.type)) {
-    throw new Error("Invalid file type. Use JPG, PNG, GIF, or WebP");
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
+const ALL_MEDIA_TYPES = [...IMAGE_TYPES, ...VIDEO_TYPES];
+
+export function isVideoFile(file: File): boolean {
+  return VIDEO_TYPES.includes(file.type);
+}
+
+export async function uploadMedia(file: File): Promise<string> {
+  if (!ALL_MEDIA_TYPES.includes(file.type)) {
+    throw new Error("Invalid file type. Use JPG, PNG, GIF, WebP, MP4, WebM, or MOV");
   }
-  if (file.size > 10 * 1024 * 1024) {
-    throw new Error("File too large. Max 10MB");
+  const maxSize = isVideoFile(file) ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+  if (file.size > maxSize) {
+    throw new Error(`File too large. Max ${isVideoFile(file) ? "50MB" : "10MB"}`);
   }
 
   const formData = new FormData();
-  formData.append("image", file);
+  formData.append("file", file);
 
   const res = await fetch("/api/upload", {
     method: "POST",
@@ -274,6 +285,9 @@ export async function uploadImage(file: File): Promise<string> {
   return data.url;
 }
 
+/** @deprecated Use uploadMedia instead */
+export const uploadImage = uploadMedia;
+
 /* ═══ Helper: shorten URL for display ═══ */
 function formatUrlDisplay(url: string): string {
   try {
@@ -287,33 +301,46 @@ function formatUrlDisplay(url: string): string {
 
 /* ═══ Compose Media Bar ═══ */
 export function MediaBar({
+  onMediaSelected,
   onImageSelected,
   onUploading,
   disabled,
 }: {
-  onImageSelected: (url: string, file?: File) => void;
+  onMediaSelected?: (url: string, file?: File) => void;
+  /** @deprecated Use onMediaSelected */
+  onImageSelected?: (url: string, file?: File) => void;
   onUploading?: (uploading: boolean) => void;
   disabled?: boolean;
 }) {
-  const handleFileSelect = () => {
+  const handleSelect = (cb: (url: string, file?: File) => void) => cb;
+  const notify = onMediaSelected || onImageSelected || (() => {});
+
+  const handleImageSelect = () => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/jpeg,image/png,image/gif,image/webp";
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-      
-      if (file.size > 10 * 1024 * 1024) {
-        alert("Image must be under 10MB");
-        return;
-      }
-
-      // Show local preview immediately
+      if (file.size > 10 * 1024 * 1024) { alert("Image must be under 10MB"); return; }
       const reader = new FileReader();
-      reader.onloadend = () => {
-        onImageSelected(reader.result as string, file);
-      };
+      reader.onloadend = () => notify(reader.result as string, file);
       reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  const handleVideoSelect = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "video/mp4,video/webm,video/quicktime";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      if (file.size > 50 * 1024 * 1024) { alert("Video must be under 50MB"); return; }
+      // Create a local object URL for video preview
+      const url = URL.createObjectURL(file);
+      notify(url, file);
     };
     input.click();
   };
@@ -321,7 +348,7 @@ export function MediaBar({
   return (
     <div className="flex items-center gap-0.5">
       <button
-        onClick={handleFileSelect}
+        onClick={handleImageSelect}
         disabled={disabled}
         className="p-2 rounded-full hover:bg-[#EBF4FF] text-[#2563EB] transition-colors disabled:opacity-40"
         title="Add photo"
@@ -331,10 +358,20 @@ export function MediaBar({
         </svg>
       </button>
       <button
+        onClick={handleVideoSelect}
+        disabled={disabled}
+        className="p-2 rounded-full hover:bg-[#EBF4FF] text-[#2563EB] transition-colors disabled:opacity-40"
+        title="Add video"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+        </svg>
+      </button>
+      <button
         disabled={disabled}
         className="p-2 rounded-full hover:bg-[#EBF4FF] text-[#2563EB] transition-colors disabled:opacity-40"
         title="Add GIF"
-        onClick={handleFileSelect}
+        onClick={handleImageSelect}
       >
         <svg className="w-5 h-5 font-bold" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
           <rect x="2" y="4" width="20" height="16" rx="3" />

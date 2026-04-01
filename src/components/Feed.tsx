@@ -7,7 +7,7 @@ import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, 
 const GOLD_BADGE_USERNAMES = ["shaan"];
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
-import { RichContent, MediaBar, uploadImage } from "@/components/RichContent";
+import { RichContent, MediaBar, uploadMedia, isVideoFile } from "@/components/RichContent";
 import { useProgram } from "@/hooks/useProgram";
 import { useWallet } from "@/hooks/usePrivyWallet";
 import { PublicKey } from "@solana/web3.js";
@@ -577,8 +577,9 @@ export default function Feed() {
   const [allReactions, setAllReactions] = useState<any[]>([]);
 
   const [posting, setPosting] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaIsVideo, setMediaIsVideo] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   // Fetch all public posts from Solana
@@ -649,7 +650,7 @@ export default function Feed() {
   const refreshInteractions = refreshFeed;
 
   const handlePost = async () => {
-    if ((!newPost.trim() && !imageFile) || posting) return;
+    if ((!newPost.trim() && !mediaFile) || posting) return;
     if (!program || !publicKey) {
       toast("error", "Wallet not connected", "Please connect your wallet to post");
       return;
@@ -662,17 +663,18 @@ export default function Feed() {
     setNewPost("");
 
     try {
-      // Upload image first if attached
-      if (imageFile) {
-        toast("privacy", "Uploading image...", "Hosting your image");
+      // Upload media first if attached
+      if (mediaFile) {
+        const label = mediaIsVideo ? "video" : "image";
+        toast("privacy", `Uploading ${label}...`, `Hosting your ${label} on IPFS`);
         try {
-          const imageUrl = await uploadImage(imageFile);
-          // Append image URL to post content
-          content = content.trim() ? `${content.trim()}\n${imageUrl}` : imageUrl;
-          setImagePreview(null);
-          setImageFile(null);
+          const mediaUrl = await uploadMedia(mediaFile);
+          content = content.trim() ? `${content.trim()}\n${mediaUrl}` : mediaUrl;
+          setMediaPreview(null);
+          setMediaFile(null);
+          setMediaIsVideo(false);
         } catch (err: any) {
-          toast("error", "Image upload failed", err.message || "Try again");
+          toast("error", `${mediaIsVideo ? "Video" : "Image"} upload failed`, err.message || "Try again");
           setPosting(false);
           setNewPost(content);
           return;
@@ -739,12 +741,16 @@ export default function Feed() {
                 placeholder="What's happening?"
                 className="w-full resize-none bg-transparent text-[15px] focus:outline-none placeholder:text-[#94A3B8] min-h-[60px] sm:min-h-[80px] leading-relaxed"
               />
-              {/* Image preview */}
-              {imagePreview && (
+              {/* Media preview (image or video) */}
+              {mediaPreview && (
                 <div className="relative mt-2 rounded-2xl overflow-hidden border border-[#E2E8F0] inline-block">
-                  <img src={imagePreview} alt="Preview" className="max-h-[200px] max-w-full object-cover rounded-2xl" />
+                  {mediaIsVideo ? (
+                    <video src={mediaPreview} className="max-h-[200px] max-w-full object-cover rounded-2xl" controls muted />
+                  ) : (
+                    <img src={mediaPreview} alt="Preview" className="max-h-[200px] max-w-full object-cover rounded-2xl" />
+                  )}
                   <button
-                    onClick={() => { setImagePreview(null); setImageFile(null); }}
+                    onClick={() => { setMediaPreview(null); setMediaFile(null); setMediaIsVideo(false); }}
                     className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
                   >
                     <X className="w-4 h-4 text-white" />
@@ -764,9 +770,12 @@ export default function Feed() {
           )}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F1F5F9] gap-3">
             <MediaBar
-              onImageSelected={(url, file) => {
-                setImagePreview(url);
-                if (file) setImageFile(file);
+              onMediaSelected={(url, file) => {
+                setMediaPreview(url);
+                if (file) {
+                  setMediaFile(file);
+                  setMediaIsVideo(isVideoFile(file));
+                }
               }}
               disabled={posting || uploading}
             />
@@ -775,7 +784,7 @@ export default function Feed() {
             )}
             <button
               onClick={handlePost}
-              disabled={(!newPost.trim() && !imageFile) || posting}
+              disabled={(!newPost.trim() && !mediaFile) || posting}
               className="touch-active px-5 py-2 bg-[#2563EB] text-white text-[15px] font-bold rounded-full hover:bg-[#1D4ED8] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shadow-blue-200"
             >
               {posting ? "Posting..." : "Post"}

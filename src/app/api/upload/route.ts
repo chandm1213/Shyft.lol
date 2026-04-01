@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { PinataSDK } from "pinata";
 
 /**
- * Image upload API route
- * Uploads images to Pinata IPFS (decentralized, permanent storage)
- * POST /api/upload with FormData containing "image" file
+ * Media upload API route
+ * Uploads images & videos to Pinata IPFS (decentralized, permanent storage)
+ * POST /api/upload with FormData containing "image" or "file" field
  * Returns { url: string } with the IPFS gateway URL
  */
 
@@ -32,21 +32,26 @@ export async function POST(request: NextRequest) {
     }
 
     const formData = await request.formData();
-    const file = formData.get("image") as File;
+    const file = (formData.get("file") || formData.get("image")) as File;
 
     if (!file) {
-      return NextResponse.json({ error: "No image provided" }, { status: 400 });
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
     // Validate file type
-    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    const imageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    const videoTypes = ["video/mp4", "video/webm", "video/quicktime"];
+    const validTypes = [...imageTypes, ...videoTypes];
+    const isVideo = videoTypes.includes(file.type);
+
     if (!validTypes.includes(file.type)) {
-      return NextResponse.json({ error: "Invalid file type. Use JPG, PNG, GIF, or WebP" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid file type. Use JPG, PNG, GIF, WebP, MP4, WebM, or MOV" }, { status: 400 });
     }
 
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ error: "File too large. Max 10MB" }, { status: 400 });
+    // Validate file size (images: 10MB, videos: 50MB)
+    const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      return NextResponse.json({ error: `File too large. Max ${isVideo ? "50MB" : "10MB"}` }, { status: 400 });
     }
 
     // Upload to Pinata IPFS
