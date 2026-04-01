@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PinataSDK } from "pinata";
 
+// Allow 60s for large video uploads
+export const maxDuration = 60;
+
 /**
  * Media upload API route
  * Uploads images & videos to Pinata IPFS (decentralized, permanent storage)

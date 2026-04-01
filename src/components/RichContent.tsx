@@ -269,6 +269,15 @@ export async function uploadMedia(file: File): Promise<string> {
     throw new Error(`File too large. Max ${isVideoFile(file) ? "50MB" : "10MB"}`);
   }
 
+  // For large files (> 4MB) or videos, upload directly to Pinata via signed URL
+  // This bypasses Vercel's 4.5MB body limit on serverless functions
+  const useDirectUpload = file.size > 4 * 1024 * 1024 || isVideoFile(file);
+
+  if (useDirectUpload) {
+    return uploadDirectToPinata(file);
+  }
+
+  // Small images go through our server-side route (simpler, same-origin)
   const formData = new FormData();
   formData.append("file", file);
 
@@ -283,6 +292,50 @@ export async function uploadMedia(file: File): Promise<string> {
   }
 
   return data.url;
+}
+
+/**
+ * Direct upload to Pinata using a signed URL — bypasses Vercel's 4.5MB limit.
+ * 1. GET /api/upload/signed-url → { signedUrl, gateway }
+ * 2. POST file directly to signedUrl (Pinata's servers)
+ * 3. Construct IPFS URL with CID + filename
+ */
+async function uploadDirectToPinata(file: File): Promise<string> {
+  // Step 1: Get signed URL from our API
+  const signRes = await fetch("/api/upload/signed-url");
+  const signData = await signRes.json();
+  if (!signRes.ok || !signData.signedUrl) {
+    throw new Error(signData.error || "Failed to get upload URL");
+  }
+
+  const { signedUrl, gateway } = signData;
+
+  // Step 2: Upload directly to Pinata
+  const formData = new FormData();
+  const safeName = file.name?.replace(/[^a-zA-Z0-9._-]/g, "_") || (isVideoFile(file) ? "video.mp4" : "image.png");
+  formData.append("file", file, safeName);
+  formData.append("network", "public");
+  formData.append("name", safeName);
+
+  const uploadRes = await fetch(signedUrl, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!uploadRes.ok) {
+    const errText = await uploadRes.text();
+    console.error("Direct Pinata upload error:", errText);
+    throw new Error("Video upload failed — please try again");
+  }
+
+  const uploadData = await uploadRes.json();
+  const cid = uploadData?.data?.cid;
+  if (!cid) {
+    throw new Error("Upload succeeded but no CID returned");
+  }
+
+  // Step 3: Construct the IPFS URL with filename for extension detection
+  return `https://${gateway}/ipfs/${cid}/${safeName}`;
 }
 
 /** @deprecated Use uploadMedia instead */
