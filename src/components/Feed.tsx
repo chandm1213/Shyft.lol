@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2 } from "lucide-react";
 
 // Gold badge for OG / founder accounts
-const GOLD_BADGE_USERNAMES = ["shaan"];
+const GOLD_BADGE_USERNAMES = ["shaan", "shyft"];
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
 import { RichContent, MediaBar, uploadMedia, isVideoFile } from "@/components/RichContent";

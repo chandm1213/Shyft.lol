@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { BadgeCheck } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 
-const GOLD_BADGE_USERNAMES = ["shaan"];
+const GOLD_BADGE_USERNAMES = ["shaan", "shyft"];
 
 /** Delay (ms) before the hover card appears / disappears */
 const SHOW_DELAY = 400;

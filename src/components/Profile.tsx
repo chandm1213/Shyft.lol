@@ -58,7 +58,7 @@ interface OnChainPost {
 /* ───────── Helpers ───────── */
 
 // Gold badge for OG / founder accounts (module-level so all components can use it)
-const GOLD_BADGE_USERNAMES = ["shaan"];
+const GOLD_BADGE_USERNAMES = ["shaan", "shyft"];
 
 function timeAgo(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000);

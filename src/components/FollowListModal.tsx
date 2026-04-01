@@ -19,7 +19,7 @@ import { PublicKey } from "@solana/web3.js";
 import { clearRpcCache } from "@/lib/program";
 
 // Gold badge for OG / founder accounts
-const GOLD_BADGE_USERNAMES = ["shaan"];
+const GOLD_BADGE_USERNAMES = ["shaan", "shyft"];
 
 type Tab = "verified_followers" | "followers" | "following";
 
