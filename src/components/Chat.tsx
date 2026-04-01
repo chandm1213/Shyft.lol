@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send,
   ArrowLeft,
-  DollarSign,
   Lock,
   Shield,
   Search,
@@ -16,7 +15,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useProgram } from "@/hooks/useProgram";
-import { usePrivatePayment } from "@/hooks/usePrivatePayment";
 import { toast } from "@/components/Toast";
 import { useWallet } from "@/hooks/usePrivyWallet";
 import { PublicKey } from "@solana/web3.js";
@@ -72,7 +70,6 @@ export default function Chat() {
   const program = useProgram();
   const { publicKey, connected } = useWallet();
   const wallet = useWallet();
-  const { sendPayment } = usePrivatePayment();
 
   // Encryption state
   const [encryptionKeys, setEncryptionKeys] = useState<nacl.BoxKeyPair | null>(null);
@@ -85,8 +82,6 @@ export default function Chat() {
   const [peerPubKey, setPeerPubKey] = useState<Uint8Array | null>(null);
   const [messages, setMessages] = useState<DecryptedMsg[]>([]);
   const [messageText, setMessageText] = useState("");
-  const [showPayment, setShowPayment] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -419,52 +414,6 @@ export default function Chat() {
     setSending(false);
   };
 
-  const handleSendPayment = async () => {
-    if (!paymentAmount || !activeChat || !program || !publicKey || !encryptionKeys) return;
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast("error", "Invalid amount", "Enter a valid SOL amount");
-      return;
-    }
-    setPaymentAmount("");
-    setShowPayment(false);
-    setSending(true);
-
-    toast("privacy", "Sending payment", `Transferring ${amount} SOL to ${activeChat.friend.displayName}`);
-
-    try {
-      const result = await sendPayment(activeChat.friend.address, amount);
-      if (!result) throw new Error("Payment transaction failed");
-
-      if (activeChat.exists && peerPubKey) {
-        try {
-          const chatData = await program.getChat(activeChat.chatId);
-          const msgIndex = chatData ? Number(chatData.messageCount || 0) : 0;
-          await program.sendE2EMessage(
-            activeChat.chatId,
-            msgIndex,
-            `💸 Sent ${amount} SOL`,
-            encryptionKeys.secretKey,
-            peerPubKey,
-            true,
-            Math.round(amount * 1_000_000)
-          );
-        } catch { /* best effort */ }
-      }
-
-      toast("success", "Payment sent! 💸", `${amount} SOL → ${activeChat.friend.displayName}`);
-      setChats(prev => prev.map(c =>
-        c.friendAddress === activeChat.friendAddress
-          ? { ...c, lastMessage: `💸 Sent ${amount} SOL`, lastMessageTime: Date.now() }
-          : c
-      ));
-    } catch (err: any) {
-      console.error("Payment error:", err);
-      toast("error", "Payment failed", err?.message?.slice(0, 80));
-    }
-    setSending(false);
-  };
-
   const filteredChats = chats.filter(c =>
     c.friend.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.friend.address.toLowerCase().includes(searchQuery.toLowerCase())
@@ -660,14 +609,7 @@ export default function Chat() {
                   <RefreshCw className={`w-3.5 h-3.5 text-[#94A3B8] ${loadingMessages ? "animate-spin" : ""}`} />
                 </button>
               )}
-              <button
-                onClick={() => setShowPayment(!showPayment)}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                  showPayment ? "bg-[#16A34A] text-white" : "bg-[#F0FDF4] text-[#16A34A] hover:bg-[#DCFCE7]"
-                }`}
-              >
-                <DollarSign className="w-4 h-4" />
-              </button>
+
             </div>
 
             {/* Messages */}
@@ -725,29 +667,6 @@ export default function Chat() {
                 const displayText = msg.isEncrypted
                   ? (msg.decrypted || "🔒 Unable to decrypt")
                   : msg.content;
-                const isPaymentMsg = displayText.startsWith("💸");
-
-                if (isPaymentMsg) {
-                  return (
-                    <div key={`${msg.timestamp}-${i}`} className={`flex ${msg.isMe ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[280px] rounded-2xl p-3 sm:p-4 ${
-                        msg.isMe
-                          ? "bg-gradient-to-br from-[#16A34A] to-[#15803D] text-white"
-                          : "bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7] text-[#15803D]"
-                      }`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <DollarSign className="w-4 h-4" />
-                          <span className="text-xs font-medium">{msg.isMe ? "You sent" : "Received"}</span>
-                        </div>
-                        <p className="text-lg font-bold">{displayText.replace("💸 ", "")}</p>
-                        <div className="flex items-center gap-1 mt-2">
-                          <Lock className="w-3 h-3" />
-                          <span className="text-[10px] opacity-80">Encrypted Payment</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
 
                 return (
                   <div key={`${msg.timestamp}-${i}`} className={`flex ${msg.isMe ? "justify-end" : "justify-start"}`}>
@@ -777,34 +696,7 @@ export default function Chat() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Payment Bar */}
-            {showPayment && (
-              <div className="px-4 py-3 bg-[#F0FDF4] border-t border-[#DCFCE7] animate-fade-in">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center gap-2 bg-white rounded-xl border border-[#DCFCE7] px-3 py-2">
-                    <DollarSign className="w-4 h-4 text-[#16A34A]" />
-                    <input
-                      type="number"
-                      value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(e.target.value)}
-                      placeholder="Amount"
-                      className="flex-1 text-sm focus:outline-none bg-transparent"
-                    />
-                    <span className="text-xs font-medium text-[#64748B]">SOL</span>
-                  </div>
-                  <button
-                    onClick={handleSendPayment}
-                    disabled={!paymentAmount || sending}
-                    className="px-4 py-2.5 bg-[#16A34A] text-white text-sm font-medium rounded-xl hover:bg-[#15803D] disabled:opacity-40 transition-all"
-                  >
-                    Send
-                  </button>
-                </div>
-                <p className="text-[10px] text-[#16A34A] mt-1.5 flex items-center gap-1">
-                  <Lock className="w-2.5 h-2.5" /> SOL transfer on-chain + encrypted receipt in chat
-                </p>
-              </div>
-            )}
+
 
             {/* Message Input */}
             <div className="p-2.5 sm:p-3 border-t border-[#E2E8F0] bg-white">
