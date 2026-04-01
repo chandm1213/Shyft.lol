@@ -23,6 +23,7 @@ const ALLOWED_PROGRAMS = new Set([
   SHADOWSPACE_PROGRAM_ID.toBase58(),
   SystemProgram.programId.toBase58(), // 11111111111111111111111111111111
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", // Associated Token Program (for account creation)
+  "ComputeBudget111111111111111111111111111111",     // Compute Budget (priority fees, unit limits)
 ]);
 
 function getTreasuryKeypair(): Keypair {
