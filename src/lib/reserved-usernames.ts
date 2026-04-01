@@ -54,6 +54,7 @@ interface InviteEntry {
 
 const INVITE_CODES: InviteEntry[] = [
   { username: "bitcoin", code: "BTC-SHYFT-2026" },
+  { username: "shyft", code: "SHYFT-SHYFT-2026" },
   // Add more: { username: "solana", code: "SOL-SHYFT-9X2K" },
 ];
 
