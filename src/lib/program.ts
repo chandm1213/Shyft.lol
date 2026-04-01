@@ -1248,7 +1248,11 @@ export class ShyftClient {
     const [followPda] = getFollowPda(user, targetPubkey);
     const treasury = await getTreasuryPubkey();
 
-    const ix = await this.program.methods
+    // Get rent amount before closing so we can refund treasury
+    const followAccount = await this.provider.connection.getAccountInfo(followPda);
+    const rentLamports = followAccount?.lamports || 0;
+
+    const closeIx = await this.program.methods
       .unfollowUser()
       .accounts({
         followAccount: followPda,
@@ -1258,11 +1262,19 @@ export class ShyftClient {
       })
       .instruction();
 
-    const tx = new Transaction().add(ix);
+    // Return rent to treasury (close sends it to user, so we transfer it back)
+    const refundIx = SystemProgram.transfer({
+      fromPubkey: user,
+      toPubkey: treasury,
+      lamports: rentLamports,
+    });
+
+    const tx = new Transaction().add(closeIx).add(refundIx);
     tx.feePayer = treasury;
     tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
     const signed = await this.provider.wallet.signTransaction(tx);
     const sig = await sponsorTransaction(signed, user.toBase58());
+    console.log("Unfollowed (treasury sponsored, rent refunded):", sig);
     rpcCache.invalidate("allFollows");
     return sig;
   }
