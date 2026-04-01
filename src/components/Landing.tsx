@@ -194,12 +194,10 @@ export default function Landing() {
               <p className="text-xs font-semibold uppercase tracking-widest text-[#94A3B8]">Live On-Chain Stats</p>
               <div className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse" />
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 max-w-md mx-auto">
               {[
                 { label: "Profiles", value: stats.profiles, icon: "👤", color: "#2563EB" },
-                { label: "Posts", value: stats.posts, icon: "📝", color: "#16A34A" },
-                { label: "Reactions", value: stats.reactions + stats.comments, icon: "💬", color: "#2563EB" },
-                { label: "Connections", value: stats.follows, icon: "🤝", color: "#16A34A" },
+                { label: "Transactions", value: stats.transactions, icon: "⚡", color: "#16A34A" },
               ].map((stat, i) => (
                 <div key={i} className="bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0] p-4 sm:p-5 text-center hover:shadow-md transition-shadow">
                   <span className="text-2xl">{stat.icon}</span>
