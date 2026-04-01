@@ -77,7 +77,7 @@ export default function Landing() {
       {/* Nav */}
       <nav className="flex items-center justify-between px-4 sm:px-6 md:px-12 py-3 sm:py-4 border-b border-[#E2E8F0] bg-white/80 backdrop-blur-lg sticky top-0 z-50">
         <div className="flex items-center gap-2 sm:gap-3">
-          <img src="/shyftlogo.png" alt="Shyft" className="shyft-logo w-10 h-10 sm:w-12 sm:h-12" />
+          <img src="/shyftlogo.png" alt="Shyft" className="shyft-logo w-12 h-12 sm:w-14 sm:h-14" />
           <div>
             <h1 className="text-base sm:text-lg font-bold text-[#1A1A2E]">Shyft</h1>
             <p className="text-[9px] sm:text-[10px] text-[#64748B] -mt-0.5">On-Chain Social</p>
