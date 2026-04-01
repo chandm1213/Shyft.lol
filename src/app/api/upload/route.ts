@@ -9,8 +9,8 @@ import { PinataSDK } from "pinata";
  */
 
 const pinata = new PinataSDK({
-  pinataJwt: process.env.PINATA_JWT!,
-  pinataGateway: process.env.PINATA_GATEWAY || "gateway.pinata.cloud",
+  pinataJwt: process.env.PINATA_JWT!.trim(),
+  pinataGateway: (process.env.PINATA_GATEWAY || "gateway.pinata.cloud").trim(),
 });
 
 const ALLOWED_ORIGINS = new Set([
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     // Upload to Pinata IPFS
     const upload = await pinata.upload.public.file(file);
-    const gateway = process.env.PINATA_GATEWAY || "gateway.pinata.cloud";
+    const gateway = (process.env.PINATA_GATEWAY || "gateway.pinata.cloud").trim();
     const url = `https://${gateway}/ipfs/${upload.cid}`;
 
     return NextResponse.json({
