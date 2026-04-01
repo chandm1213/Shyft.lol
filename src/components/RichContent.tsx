@@ -15,6 +15,9 @@ const URL_REGEX = /https?:\/\/[^\s<]+[^\s<.,;:!?"')\]]/gi;
 /* ── Image extensions ── */
 const IMAGE_EXTS = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i;
 
+/* ── IPFS URLs (Pinata, etc.) — treat as images ── */
+const IPFS_IMAGE_URL = /\.mypinata\.cloud\/ipfs\/|ipfs\.io\/ipfs\/|cloudflare-ipfs\.com\/ipfs\//i;
+
 /* ── Video extensions ── */
 const VIDEO_EXTS = /\.(mp4|webm|ogg|mov)(\?.*)?$/i;
 
@@ -31,11 +34,11 @@ interface RichContentProps {
 
 export function RichContent({ content, className = "" }: RichContentProps) {
   const urls = content.match(URL_REGEX) || [];
-  const imageUrls = urls.filter((u) => IMAGE_EXTS.test(u) || GIF_DOMAINS.test(u));
+  const imageUrls = urls.filter((u) => IMAGE_EXTS.test(u) || GIF_DOMAINS.test(u) || IPFS_IMAGE_URL.test(u));
   const videoUrls = urls.filter((u) => VIDEO_EXTS.test(u));
   const youtubeUrls = urls.map((u) => ({ url: u, match: u.match(YOUTUBE_REGEX) })).filter((x) => x.match);
   const linkUrls = urls.filter(
-    (u) => !IMAGE_EXTS.test(u) && !VIDEO_EXTS.test(u) && !YOUTUBE_REGEX.test(u)
+    (u) => !IMAGE_EXTS.test(u) && !VIDEO_EXTS.test(u) && !YOUTUBE_REGEX.test(u) && !IPFS_IMAGE_URL.test(u)
   );
 
   /* ── Render text with inline links ── */
@@ -54,7 +57,7 @@ export function RichContent({ content, className = "" }: RichContentProps) {
       }
 
       // If it's an image URL, don't show it inline as text (we'll show the image below)
-      if (IMAGE_EXTS.test(url)) {
+      if (IMAGE_EXTS.test(url) || IPFS_IMAGE_URL.test(url)) {
         lastIndex = idx + url.length;
         continue;
       }
