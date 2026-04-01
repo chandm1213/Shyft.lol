@@ -380,73 +380,27 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* Powered By — Privy & Bags */}
-      <div className="px-4 sm:px-6 md:px-12 py-12 sm:py-16 md:py-24 bg-white border-t border-[#E2E8F0]">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-8 sm:mb-12">
-            <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#1A1A2E]">
-              Powered by the best{" "}
-              <span className="text-[#64748B]">in web3.</span>
-            </h3>
-            <p className="text-xs sm:text-sm text-[#94A3B8] mt-2 sm:mt-3">
-              Industry-leading infrastructure for wallets, security, and token launches
-            </p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-4 sm:gap-6 max-w-3xl mx-auto">
-            {/* Privy */}
-            <a
-              href="https://privy.io"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group bg-[#F8FAFC] hover:bg-white rounded-2xl border border-[#E2E8F0] hover:border-[#1A1A2E]/20 p-5 sm:p-6 transition-all hover:shadow-lg"
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-[#E2E8F0] flex items-center justify-center flex-shrink-0">
-                  <img src="/privy.jpg" alt="Privy" className="w-10 h-10 object-contain rounded-lg" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-[#1A1A2E] group-hover:text-[#1A1A2E]">Privy</h4>
-                  <p className="text-[10px] text-[#94A3B8]">Wallet Infrastructure</p>
-                </div>
+      {/* Partners */}
+      <div className="px-4 sm:px-6 md:px-12 py-10 sm:py-14 bg-white border-t border-[#E2E8F0]">
+        <div className="max-w-3xl mx-auto text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#94A3B8] mb-6 sm:mb-8">Our Partners</p>
+          <div className="flex items-center justify-center gap-8 sm:gap-16">
+            <a href="https://privy.io" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 group">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-[#E2E8F0] group-hover:border-[#2563EB]/30 transition-all group-hover:shadow-lg">
+                <img src="/privy.jpg" alt="Privy" className="w-full h-full object-cover" />
               </div>
-              <p className="text-xs text-[#64748B] leading-relaxed">
-                Non-custodial embedded wallets secured by <strong>hardware-level TEEs</strong> (AWS Nitro Enclaves). 
-                Sign in with email, Google, or Twitter — your keys are split via Shamir secret sharing and never exposed. 
-                Not even Privy or Shyft can access your wallet.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                <span className="text-[9px] font-medium bg-[#EFF6FF] text-[#2563EB] px-2 py-0.5 rounded-full">Non-Custodial</span>
-                <span className="text-[9px] font-medium bg-[#F0FDF4] text-[#16A34A] px-2 py-0.5 rounded-full">TEE Secured</span>
-                <span className="text-[9px] font-medium bg-[#EFF6FF] text-[#2563EB] px-2 py-0.5 rounded-full">Social Login</span>
+              <div className="text-center">
+                <p className="text-sm font-bold text-[#1A1A2E]">Privy</p>
+                <p className="text-[10px] text-[#94A3B8]">Wallet Infrastructure</p>
               </div>
             </a>
-
-            {/* Bags */}
-            <a
-              href="https://bags.fm"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group bg-[#F8FAFC] hover:bg-white rounded-2xl border border-[#E2E8F0] hover:border-[#16A34A]/20 p-5 sm:p-6 transition-all hover:shadow-lg"
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-[#E2E8F0] flex items-center justify-center flex-shrink-0">
-                  <img src="/bags.jpg" alt="Bags.fm" className="w-10 h-10 object-contain rounded-lg" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-[#1A1A2E] group-hover:text-[#1A1A2E]">Bags.fm</h4>
-                  <p className="text-[10px] text-[#94A3B8]">Token Launch Platform</p>
-                </div>
+            <a href="https://bags.fm" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 group">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-[#E2E8F0] group-hover:border-[#16A34A]/30 transition-all group-hover:shadow-lg">
+                <img src="/bags.jpg" alt="Bags.fm" className="w-full h-full object-cover" />
               </div>
-              <p className="text-xs text-[#64748B] leading-relaxed">
-                Launch your own token directly from your Shyft profile. Powered by <strong>Bags.fm</strong> — the leading 
-                token launch platform on Solana. Create a bonding curve, let your community trade, and auto-graduate 
-                to Raydium when the market cap hits the threshold.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                <span className="text-[9px] font-medium bg-[#F0FDF4] text-[#16A34A] px-2 py-0.5 rounded-full">Token Launches</span>
-                <span className="text-[9px] font-medium bg-[#EFF6FF] text-[#2563EB] px-2 py-0.5 rounded-full">Bonding Curve</span>
-                <span className="text-[9px] font-medium bg-[#F0FDF4] text-[#16A34A] px-2 py-0.5 rounded-full">Raydium Graduation</span>
+              <div className="text-center">
+                <p className="text-sm font-bold text-[#1A1A2E]">Bags.fm</p>
+                <p className="text-[10px] text-[#94A3B8]">Token Launches</p>
               </div>
             </a>
           </div>
