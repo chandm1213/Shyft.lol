@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { PinataSDK } from "pinata";
 
 /**
  * Image upload API route
- * Uploads images to freeimage.host (free image hosting)
+ * Uploads images to Pinata IPFS (decentralized, permanent storage)
  * POST /api/upload with FormData containing "image" file
- * Returns { url: string } with the hosted image URL
+ * Returns { url: string } with the IPFS gateway URL
  */
 
-const FREEIMAGE_API_KEY = process.env.FREEIMAGE_API_KEY || "6d207e02198a847aa98d0a2a901485a5";
+const pinata = new PinataSDK({
+  pinataJwt: process.env.PINATA_JWT!,
+  pinataGateway: process.env.PINATA_GATEWAY || "gateway.pinata.cloud",
+});
 
 const ALLOWED_ORIGINS = new Set([
   "https://www.shyft.lol",
@@ -45,33 +49,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File too large. Max 10MB" }, { status: 400 });
     }
 
-    // Convert to base64
-    const bytes = await file.arrayBuffer();
-    const base64 = Buffer.from(bytes).toString("base64");
-
-    // Upload to freeimage.host using URLSearchParams
-    const body = new URLSearchParams();
-    body.append("key", FREEIMAGE_API_KEY);
-    body.append("source", base64);
-    body.append("format", "json");
-
-    const response = await fetch("https://freeimage.host/api/1/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    });
-
-    const data = await response.json();
-
-    if (data.status_code !== 200) {
-      console.error("freeimage error:", JSON.stringify(data));
-      return NextResponse.json({ error: "Upload failed", details: data }, { status: 500 });
-    }
+    // Upload to Pinata IPFS
+    const upload = await pinata.upload.public.file(file);
+    const gateway = process.env.PINATA_GATEWAY || "gateway.pinata.cloud";
+    const url = `https://${gateway}/ipfs/${upload.cid}`;
 
     return NextResponse.json({
-      url: data.image.display_url || data.image.url,
-      thumb: data.image.thumb?.url || data.image.display_url || data.image.url,
-      delete_url: data.image.delete_url || "",
+      url,
+      thumb: url,
+      cid: upload.cid,
     });
   } catch (err: any) {
     console.error("Upload error:", err);
