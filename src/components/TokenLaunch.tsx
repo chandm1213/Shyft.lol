@@ -398,7 +398,7 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
               <Info className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
               <div className="text-xs text-[#1D4ED8]">
                 <p className="font-medium mb-0.5">How it works</p>
-                <p className="text-[#3B82F6]">Your token launches on Bags.fm with a bonding curve. When people trade your token, you earn fees forever. Shyft takes a 25% platform fee on trading revenue.</p>
+                <p className="text-[#3B82F6]">Your token launches on Bags.fm with a bonding curve. When people trade your token, you earn fees forever.</p>
               </div>
             </div>
 
