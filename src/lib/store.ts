@@ -52,6 +52,10 @@ interface AppState {
   likedPosts: string[]; // array of post publicKeys the user has liked
   addLikedPost: (postKey: string) => void;
 
+  // Paid post unlocks
+  unlockedPosts: string[]; // post publicKeys the user has paid to unlock
+  addUnlockedPost: (postKey: string) => void;
+
   // Profile viewing
   viewingProfile: string | null; // wallet address of user being viewed, null = own profile
   setViewingProfile: (addr: string | null) => void;
@@ -219,6 +223,12 @@ export const useAppStore = create<AppState>()(
     likedPosts: state.likedPosts.includes(postKey) ? state.likedPosts : [...state.likedPosts, postKey],
   })),
 
+  // Paid post unlocks
+  unlockedPosts: [],
+  addUnlockedPost: (postKey) => set((state) => ({
+    unlockedPosts: state.unlockedPosts.includes(postKey) ? state.unlockedPosts : [...state.unlockedPosts, postKey],
+  })),
+
   // Profile viewing
   viewingProfile: null,
   setViewingProfile: (addr) => set({ viewingProfile: addr }),
@@ -270,6 +280,7 @@ export const useAppStore = create<AppState>()(
         payments: state.payments,
         onChainComments: state.onChainComments,
         likedPosts: state.likedPosts,
+        unlockedPosts: state.unlockedPosts,
         notifications: state.notifications,
         seenNotificationKeys: state.seenNotificationKeys,
         theme: state.theme,

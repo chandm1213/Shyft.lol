@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2 } from "lucide-react";
 
 // Gold badge for OG / founder accounts
 const GOLD_BADGE_USERNAMES = ["shaan", "shyft"];
@@ -9,10 +9,26 @@ import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
 import { RichContent, MediaBar, uploadMedia, isVideoFile } from "@/components/RichContent";
 import { useProgram } from "@/hooks/useProgram";
-import { useWallet } from "@/hooks/usePrivyWallet";
-import { PublicKey } from "@solana/web3.js";
+import { useWallet, useConnection } from "@/hooks/usePrivyWallet";
+import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { ShyftClient, clearRpcCache } from "@/lib/program";
 import ProfileHoverCard from "@/components/ProfileHoverCard";
+
+/** Parse a paid post: content starts with PAID|<price>|<actual content> */
+function parsePaidPost(content: string): { isPaid: boolean; price: number; actualContent: string } {
+  if (content.startsWith("PAID|")) {
+    const firstPipe = content.indexOf("|");
+    const secondPipe = content.indexOf("|", firstPipe + 1);
+    if (secondPipe !== -1) {
+      const price = parseFloat(content.substring(firstPipe + 1, secondPipe));
+      const actualContent = content.substring(secondPipe + 1);
+      if (!isNaN(price) && price > 0) {
+        return { isPaid: true, price, actualContent };
+      }
+    }
+  }
+  return { isPaid: false, price: 0, actualContent: content };
+}
 
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -62,8 +78,9 @@ function OnChainPostCard({
   onRepost: (content: string) => void;
   onDelete: () => void;
 }) {
-  const { likedPosts, addLikedPost, isConnected, currentUser, navigateToProfile } = useAppStore();
-  const { publicKey: walletKey } = useWallet();
+  const { likedPosts, addLikedPost, isConnected, currentUser, navigateToProfile, unlockedPosts, addUnlockedPost, addPayment } = useAppStore();
+  const { publicKey: walletKey, signTransaction } = useWallet();
+  const { connection } = useConnection();
   const [showComments, setShowComments] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -73,6 +90,11 @@ function OnChainPostCard({
   const [localLikeBoost, setLocalLikeBoost] = useState(0);
   const [reposting, setReposting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+
+  // Paid post detection
+  const { isPaid, price: postPrice, actualContent } = parsePaidPost(post.content);
+  const isUnlocked = unlockedPosts.includes(post.publicKey) || isMe;
 
   const hasLiked = likedPosts.includes(post.publicKey);
   const postComments = allComments.filter((c) => c.post === post.publicKey)
@@ -80,6 +102,70 @@ function OnChainPostCard({
   const postReactions = allReactions.filter((r) => r.post === post.publicKey);
   const totalLikes = Number(post.likes || 0) + localLikeBoost;
   const totalComments = postComments.length;
+
+  /** Unlock a paid post by sending SOL directly to the creator's wallet */
+  const handleUnlock = async () => {
+    if (!walletKey || !signTransaction || !connection || unlocking) return;
+    setUnlocking(true);
+    try {
+      const creatorPubkey = new PublicKey(post.author);
+      const lamports = Math.round(postPrice * LAMPORTS_PER_SOL);
+
+      // Check balance
+      const balance = await connection.getBalance(walletKey);
+      if (balance < lamports + 10000) {
+        toast("error", "Insufficient SOL", `You need at least ${postPrice} SOL to unlock this post.`);
+        setUnlocking(false);
+        return;
+      }
+
+      toast("privacy", "Unlocking...", `Sending ${postPrice} SOL to creator`);
+
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: walletKey,
+          toPubkey: creatorPubkey,
+          lamports,
+        })
+      );
+
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = walletKey;
+
+      const signedTx = await signTransaction(tx);
+      const sig = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: false });
+
+      await connection.confirmTransaction(
+        { signature: sig, blockhash, lastValidBlockHeight },
+        "confirmed"
+      );
+
+      // Record the unlock + payment
+      addUnlockedPost(post.publicKey);
+      addPayment({
+        id: sig,
+        sender: "me",
+        recipient: post.author,
+        amount: postPrice,
+        token: "SOL",
+        status: "completed",
+        isPrivate: false,
+        timestamp: Date.now(),
+        txSignature: sig,
+      });
+
+      toast("success", "Post unlocked! 🔓", `Paid ${postPrice} SOL — TX: ${sig.slice(0, 8)}...`);
+    } catch (err: any) {
+      console.error("Unlock error:", err);
+      if (err?.message?.includes("User rejected") || err?.message?.includes("rejected the request")) {
+        toast("error", "Unlock cancelled", "You rejected the transaction");
+      } else {
+        toast("error", "Unlock failed", err?.message?.slice(0, 80) || "Please try again");
+      }
+    }
+    setUnlocking(false);
+  };
 
   // Group reactions by type
   const reactionCounts: Record<number, number> = {};
@@ -228,7 +314,11 @@ function OnChainPostCard({
             <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#2563EB] bg-[#EFF6FF] px-2 py-0.5 rounded-full">
               <Globe className="w-2.5 h-2.5" /> On-Chain
             </span>
-
+            {isPaid && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                <Lock className="w-2.5 h-2.5" /> {postPrice} SOL
+              </span>
+            )}
           </div>
         </div>
         </button>
@@ -238,9 +328,78 @@ function OnChainPostCard({
       {/* Content */}
       <div className="mb-3 pl-0 sm:pl-14">
         {(() => {
+          // Determine the content to render (use actualContent for paid posts that are unlocked)
+          const renderContent = isPaid && isUnlocked ? actualContent : post.content;
+
+          // Paid post — locked state
+          if (isPaid && !isUnlocked) {
+            const previewText = actualContent.slice(0, 40).replace(/\n/g, " ");
+            return (
+              <div className="relative">
+                {/* Blurred preview */}
+                <div className="select-none pointer-events-none" style={{ filter: "blur(8px)", WebkitFilter: "blur(8px)" }}>
+                  <p className="text-[15px] text-[#475569] leading-relaxed">
+                    {previewText}{actualContent.length > 40 ? "..." : ""}
+                  </p>
+                </div>
+                {/* Unlock overlay */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl px-5 py-4 text-center shadow-lg max-w-[280px]">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-2">
+                      <Lock className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <p className="text-sm font-semibold text-[#1A1A2E] mb-1">Paid Content</p>
+                    <p className="text-xs text-[#64748B] mb-3">
+                      Unlock this post for <span className="font-bold text-amber-600">{postPrice} SOL</span>
+                    </p>
+                    <button
+                      onClick={handleUnlock}
+                      disabled={unlocking || !isConnected}
+                      className="touch-active w-full px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-bold rounded-xl hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center gap-2"
+                    >
+                      {unlocking ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Paying...
+                        </>
+                      ) : (
+                        <>
+                          <Unlock className="w-4 h-4" />
+                          Unlock for {postPrice} SOL
+                        </>
+                      )}
+                    </button>
+                    <p className="text-[10px] text-[#94A3B8] mt-2">Payment goes directly to creator&apos;s wallet</p>
+                  </div>
+                </div>
+                {/* Spacer so the card has enough height */}
+                <div className="h-20" />
+              </div>
+            );
+          }
+
+          // Paid post — unlocked (show badge + content)
+          if (isPaid && isUnlocked) {
+            return (
+              <div>
+                {!isMe && (
+                  <div className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full mb-2">
+                    <Unlock className="w-2.5 h-2.5" /> Unlocked
+                  </div>
+                )}
+                {isMe && (
+                  <div className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full mb-2">
+                    <DollarSign className="w-2.5 h-2.5" /> Paid Post · {postPrice} SOL
+                  </div>
+                )}
+                <RichContent content={actualContent} />
+              </div>
+            );
+          }
+
           // New format: RT|@author|content
-          if (post.content.startsWith("RT|")) {
-            const parts = post.content.split("|");
+          if (renderContent.startsWith("RT|")) {
+            const parts = renderContent.split("|");
             const rtAuthor = parts[1] || "";
             const rtContent = parts.slice(2).join("|");
             // Find the wallet address for the repost author so we can navigate to their profile
@@ -263,7 +422,7 @@ function OnChainPostCard({
             );
           }
           // Legacy format: 🔁 Repost from @user:\n\n"content"
-          const legacyMatch = post.content.match(/^\u{1F501}\s*Repost from (@\w+):\s*[\\n]*\s*"?([\s\S]*?)"?\s*$/u);
+          const legacyMatch = renderContent.match(/^\u{1F501}\s*Repost from (@\w+):\s*[\\n]*\s*"?([\s\S]*?)"?\s*$/u);
           if (legacyMatch) {
             const rtAuthor = legacyMatch[1];
             const rtContent = legacyMatch[2].replace(/\\n/g, '').replace(/^"|"$/g, '').trim();
@@ -285,7 +444,7 @@ function OnChainPostCard({
               </div>
             );
           }
-          return <RichContent content={post.content} />;
+          return <RichContent content={renderContent} />;
         })()}
       </div>
 
@@ -581,6 +740,8 @@ export default function Feed() {
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaIsVideo, setMediaIsVideo] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isPaidPost, setIsPaidPost] = useState(false);
+  const [paidPrice, setPaidPrice] = useState("0.01");
 
   // Fetch all public posts from Solana
   const fetchOnchainPosts = async () => {
@@ -598,12 +759,12 @@ export default function Feed() {
       setAllComments(comments);
       setAllReactions(reactions);
 
-      // All posts are public now
-      const publicPosts = allMapped.filter((p: any) => !p.isPrivate);
+      // Show all posts: free (public) + paid (private with PAID| prefix)
+      const visiblePosts = allMapped.filter((p: any) => !p.isPrivate || p.content.startsWith("PAID|"));
       
-      console.log("📊 All posts:", allMapped.length, "Public:", publicPosts.length);
+      console.log("📊 All posts:", allMapped.length, "Visible:", visiblePosts.length);
 
-      setOnchainPosts(publicPosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
+      setOnchainPosts(visiblePosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
       
       const map: Record<string, any> = {};
       profiles.forEach((p: any) => { map[p.owner] = p; });
@@ -639,8 +800,8 @@ export default function Feed() {
       ]);
       setAllComments(comments);
       setAllReactions(reactions);
-      const publicPosts = allMapped.filter((p: any) => !p.isPrivate);
-      setOnchainPosts(publicPosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
+      const visiblePosts = allMapped.filter((p: any) => !p.isPrivate || p.content.startsWith("PAID|"));
+      setOnchainPosts(visiblePosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
     } catch (err) {
       console.error("Failed to refresh feed:", err);
     }
@@ -692,8 +853,24 @@ export default function Feed() {
         throw new Error("You need to create a profile first. Go to the Profile tab to set up your account.");
       }
 
-      const sig = await program.createPost(postId, content, false);
-      toast("success", "Post confirmed on Solana", `TX: ${sig.slice(0, 8)}...`);
+      // Prepend PAID| prefix for paid posts
+      if (isPaidPost) {
+        const price = parseFloat(paidPrice);
+        if (isNaN(price) || price <= 0) {
+          toast("error", "Invalid price", "Please enter a valid price greater than 0");
+          setPosting(false);
+          setNewPost(content);
+          return;
+        }
+        content = `PAID|${price}|${content}`;
+      }
+
+      const sig = await program.createPost(postId, content, isPaidPost);
+      toast("success", isPaidPost ? `Paid post live! 🔒 ${paidPrice} SOL` : "Post confirmed on Solana", `TX: ${sig.slice(0, 8)}...`);
+
+      // Reset paid post state
+      setIsPaidPost(false);
+      setPaidPrice("0.01");
 
       setTimeout(() => fetchOnchainPosts(), 1500);
     } catch (err: any) {
@@ -768,26 +945,64 @@ export default function Feed() {
               </div>
             </div>
           )}
+          {/* Paid post banner */}
+          {isPaidPost && (
+            <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl animate-fade-in">
+              <Lock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span className="text-xs font-medium text-amber-700">Paid post — viewers pay to unlock</span>
+              <div className="ml-auto flex items-center gap-1.5">
+                <input
+                  type="number"
+                  value={paidPrice}
+                  onChange={(e) => setPaidPrice(e.target.value)}
+                  min="0.001"
+                  step="0.01"
+                  className="w-20 text-xs font-bold text-amber-700 bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  placeholder="0.01"
+                />
+                <span className="text-xs font-bold text-amber-600">SOL</span>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F1F5F9] gap-3">
-            <MediaBar
-              onMediaSelected={(url, file) => {
-                setMediaPreview(url);
-                if (file) {
-                  setMediaFile(file);
-                  setMediaIsVideo(isVideoFile(file));
-                }
-              }}
-              disabled={posting || uploading}
-            />
+            <div className="flex items-center gap-1">
+              <MediaBar
+                onMediaSelected={(url, file) => {
+                  setMediaPreview(url);
+                  if (file) {
+                    setMediaFile(file);
+                    setMediaIsVideo(isVideoFile(file));
+                  }
+                }}
+                disabled={posting || uploading}
+              />
+              {/* Paid post toggle */}
+              <button
+                type="button"
+                onClick={() => setIsPaidPost(!isPaidPost)}
+                className={`touch-active flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  isPaidPost
+                    ? "text-amber-600 bg-amber-50 border border-amber-200"
+                    : "text-[#94A3B8] hover:text-amber-600 hover:bg-amber-50"
+                }`}
+                title={isPaidPost ? "Make post free" : "Make post paid"}
+              >
+                {isPaidPost ? <Lock className="w-3.5 h-3.5" /> : <DollarSign className="w-3.5 h-3.5" />}
+              </button>
+            </div>
             {uploading && (
               <span className="text-xs text-[#2563EB] animate-pulse">Uploading...</span>
             )}
             <button
               onClick={handlePost}
               disabled={(!newPost.trim() && !mediaFile) || posting}
-              className="touch-active px-5 py-2 bg-[#2563EB] text-white text-[15px] font-bold rounded-full hover:bg-[#1D4ED8] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shadow-blue-200"
+              className={`touch-active px-5 py-2 text-white text-[15px] font-bold rounded-full disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm ${
+                isPaidPost
+                  ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-amber-200"
+                  : "bg-[#2563EB] hover:bg-[#1D4ED8] shadow-blue-200"
+              }`}
             >
-              {posting ? "Posting..." : "Post"}
+              {posting ? "Posting..." : isPaidPost ? `Post · ${paidPrice} SOL` : "Post"}
             </button>
           </div>
         </div>
