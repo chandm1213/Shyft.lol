@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2 } from "lucide-react";
+import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2, Coins } from "lucide-react";
 
 // Gold badge for OG / founder accounts
 const GOLD_BADGE_USERNAMES = ["shaan", "shyft"];
@@ -78,7 +78,7 @@ function OnChainPostCard({
   onRepost: (content: string) => void;
   onDelete: () => void;
 }) {
-  const { likedPosts, addLikedPost, isConnected, currentUser, navigateToProfile, unlockedPosts, addUnlockedPost, addPayment } = useAppStore();
+  const { likedPosts, addLikedPost, isConnected, currentUser, navigateToProfile, unlockedPosts, addUnlockedPost, addPayment, postTips, addPostTip } = useAppStore();
   const { publicKey: walletKey, signTransaction } = useWallet();
   const { connection } = useConnection();
   const [showComments, setShowComments] = useState(false);
@@ -91,6 +91,9 @@ function OnChainPostCard({
   const [reposting, setReposting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
+  const [showTip, setShowTip] = useState(false);
+  const [tipping, setTipping] = useState(false);
+  const [tipAmount, setTipAmount] = useState("");
 
   // Paid post detection
   const { isPaid, price: postPrice, actualContent } = parsePaidPost(post.content);
@@ -166,6 +169,73 @@ function OnChainPostCard({
     }
     setUnlocking(false);
   };
+
+  const handleTip = async (amount: number) => {
+    if (!walletKey || !signTransaction || !connection || tipping || isMe) return;
+    if (amount <= 0 || isNaN(amount)) { toast("error", "Invalid tip", "Enter a valid SOL amount"); return; }
+    setTipping(true);
+    setShowTip(false);
+    try {
+      const creatorPubkey = new PublicKey(post.author);
+      const lamports = Math.round(amount * LAMPORTS_PER_SOL);
+
+      const balance = await connection.getBalance(walletKey);
+      if (balance < lamports + 10000) {
+        toast("error", "Insufficient SOL", `You need at least ${amount} SOL to send this tip.`);
+        setTipping(false);
+        return;
+      }
+
+      toast("privacy", "Sending tip...", `${amount} SOL → creator`);
+
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: walletKey,
+          toPubkey: creatorPubkey,
+          lamports,
+        })
+      );
+
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = walletKey;
+
+      const signedTx = await signTransaction(tx);
+      const sig = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: false });
+
+      await connection.confirmTransaction(
+        { signature: sig, blockhash, lastValidBlockHeight },
+        "confirmed"
+      );
+
+      addPostTip(post.publicKey, amount);
+      addPayment({
+        id: sig,
+        sender: "me",
+        recipient: post.author,
+        amount,
+        token: "SOL",
+        status: "completed",
+        isPrivate: false,
+        timestamp: Date.now(),
+        txSignature: sig,
+      });
+
+      const authorName = profile?.username ? `@${profile.username}` : post.author.slice(0, 8);
+      toast("success", `Tipped ${amount} SOL! 💸`, `Sent to ${authorName} — TX: ${sig.slice(0, 8)}...`);
+      setTipAmount("");
+    } catch (err: any) {
+      console.error("Tip error:", err);
+      if (err?.message?.includes("User rejected") || err?.message?.includes("rejected the request")) {
+        toast("error", "Tip cancelled", "You rejected the transaction");
+      } else {
+        toast("error", "Tip failed", err?.message?.slice(0, 80) || "Please try again");
+      }
+    }
+    setTipping(false);
+  };
+
+  const tipInfo = postTips[post.publicKey];
 
   // Group reactions by type
   const reactionCounts: Record<number, number> = {};
@@ -545,6 +615,66 @@ function OnChainPostCard({
             </div>
           )}
         </div>
+
+        {/* Tip button — hidden on own posts */}
+        {!isMe && (
+          <div className="relative">
+            <button
+              onClick={() => setShowTip(!showTip)}
+              disabled={!isConnected || tipping}
+              className={`touch-active flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium transition-all ${
+                tipping
+                  ? "text-emerald-400 bg-emerald-50 opacity-60"
+                  : showTip
+                    ? "text-emerald-600 bg-emerald-50"
+                    : tipInfo?.myTip
+                      ? "text-emerald-500 bg-emerald-50"
+                      : "text-[#94A3B8] hover:text-emerald-600 hover:bg-emerald-50 active:bg-emerald-50"
+              } disabled:cursor-not-allowed`}
+              title="Tip this creator"
+            >
+              <Coins className={`w-4 h-4 ${tipping ? "animate-pulse" : ""}`} />
+              {tipInfo ? `${tipInfo.totalAmount.toFixed(2)}` : "Tip"}
+            </button>
+
+            {/* Tip picker popup */}
+            {showTip && !tipping && (
+              <div className="absolute bottom-full left-0 mb-2 bg-white rounded-2xl shadow-lg border border-[#E2E8F0] p-3 z-50 animate-fade-in min-w-[200px]">
+                <p className="text-xs font-semibold text-[#1E293B] mb-2">Send a tip 💸</p>
+                <div className="flex gap-1.5 mb-2">
+                  {[0.01, 0.05, 0.1, 0.5].map((amt) => (
+                    <button
+                      key={amt}
+                      onClick={() => handleTip(amt)}
+                      className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:bg-emerald-200 transition-all"
+                    >
+                      {amt} SOL
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-1.5">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.001"
+                    placeholder="Custom"
+                    value={tipAmount}
+                    onChange={(e) => setTipAmount(e.target.value)}
+                    className="flex-1 px-2.5 py-1.5 rounded-lg text-xs border border-[#E2E8F0] bg-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-emerald-300"
+                    onKeyDown={(e) => { if (e.key === "Enter" && tipAmount) handleTip(parseFloat(tipAmount)); }}
+                  />
+                  <button
+                    onClick={() => tipAmount && handleTip(parseFloat(tipAmount))}
+                    disabled={!tipAmount}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Repost — blocked for paid posts */}
         {isPaid ? (

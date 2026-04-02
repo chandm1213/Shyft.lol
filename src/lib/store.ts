@@ -56,6 +56,10 @@ interface AppState {
   unlockedPosts: string[]; // post publicKeys the user has paid to unlock
   addUnlockedPost: (postKey: string) => void;
 
+  // Post tips
+  postTips: Record<string, { totalAmount: number; tipCount: number; myTip: number }>;
+  addPostTip: (postKey: string, amount: number) => void;
+
   // Profile viewing
   viewingProfile: string | null; // wallet address of user being viewed, null = own profile
   setViewingProfile: (addr: string | null) => void;
@@ -229,6 +233,22 @@ export const useAppStore = create<AppState>()(
     unlockedPosts: state.unlockedPosts.includes(postKey) ? state.unlockedPosts : [...state.unlockedPosts, postKey],
   })),
 
+  // Post tips
+  postTips: {},
+  addPostTip: (postKey, amount) => set((state) => {
+    const existing = state.postTips[postKey] || { totalAmount: 0, tipCount: 0, myTip: 0 };
+    return {
+      postTips: {
+        ...state.postTips,
+        [postKey]: {
+          totalAmount: existing.totalAmount + amount,
+          tipCount: existing.tipCount + 1,
+          myTip: existing.myTip + amount,
+        },
+      },
+    };
+  }),
+
   // Profile viewing
   viewingProfile: null,
   setViewingProfile: (addr) => set({ viewingProfile: addr }),
@@ -281,6 +301,7 @@ export const useAppStore = create<AppState>()(
         onChainComments: state.onChainComments,
         likedPosts: state.likedPosts,
         unlockedPosts: state.unlockedPosts,
+        postTips: state.postTips,
         notifications: state.notifications,
         seenNotificationKeys: state.seenNotificationKeys,
         theme: state.theme,
