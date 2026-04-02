@@ -51,6 +51,9 @@ export function useNotifications() {
   // Track if like counts were initialized (to avoid false positives on first poll)
   const likeCountsInitialized = useRef(false);
 
+  // Track last known tip total to detect new incoming tips
+  const lastTipTotal = useRef<number | null>(null);
+
   const poll = useCallback(async () => {
     if (!program || !publicKey) return;
 
@@ -227,6 +230,32 @@ export function useNotifications() {
           }
         }
       }
+
+      // ── Tip detection: check for new incoming SOL tips ──
+      try {
+        const tipRes = await fetch(`/api/tips-received?wallet=${myAddr}`);
+        if (tipRes.ok) {
+          const tipData = await tipRes.json();
+          const currentTotal = tipData.totalSol || 0;
+          if (lastTipTotal.current === null) {
+            // First check — just record baseline, don't notify
+            lastTipTotal.current = currentTotal;
+          } else if (currentTotal > lastTipTotal.current) {
+            const diff = Math.round((currentTotal - lastTipTotal.current) * 1000) / 1000;
+            lastTipTotal.current = currentTotal;
+            newNotifications.push({
+              id: uuidv4(),
+              type: "tip",
+              actorAddress: "unknown",
+              actorName: "Someone",
+              tipAmount: diff,
+              postPreview: `+${diff} SOL`,
+              timestamp: Date.now(),
+              read: false,
+            });
+          }
+        }
+      } catch {}
 
       // Mark initial seed as done
       if (isFirstPoll) {

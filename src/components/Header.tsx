@@ -136,6 +136,7 @@ export default function Header() {
       case "reaction": return <><strong>{n.actorName}</strong> reacted {n.reactionEmoji} to your post</>;
       case "repost": return <><strong>{n.actorName}</strong> reposted your post</>;
       case "follow": return <><strong>{n.actorName}</strong> started following you</>;
+      case "tip": return <><strong>💸 {n.postPreview}</strong> — someone tipped you!</>;
       default: return <><strong>{n.actorName}</strong> interacted with your content</>;
     }
   };

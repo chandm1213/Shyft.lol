@@ -6,7 +6,7 @@ import type { Post, ChatConversation, ChatMessage, Payment, UserProfile } from "
 /* ───────── Notification Types ───────── */
 export interface AppNotification {
   id: string;
-  type: "like" | "comment" | "repost" | "follow" | "reaction";
+  type: "like" | "comment" | "repost" | "follow" | "reaction" | "tip";
   /** Who triggered it */
   actorAddress: string;
   actorName: string;
@@ -16,6 +16,7 @@ export interface AppNotification {
   /** Extra info */
   reactionEmoji?: string;
   commentText?: string;
+  tipAmount?: number;
   timestamp: number;
   read: boolean;
 }
