@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2, Coins } from "lucide-react";
+import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2, Coins, TrendingUp } from "lucide-react";
 
 // Gold badge for OG / founder accounts
 const GOLD_BADGE_USERNAMES = ["shaan", "shyft"];
@@ -759,6 +759,32 @@ function OnChainPostCard({
             } disabled:cursor-not-allowed`}
           >
             <Trash2 className={`w-4 h-4 ${deleting ? "animate-pulse" : ""}`} />
+          </button>
+        )}
+
+        {/* Flex Earnings — own posts with tips */}
+        {isMe && tipInfo && tipInfo.totalAmount > 0 && (
+          <button
+            onClick={async () => {
+              const myName = currentUser?.username || "someone";
+              const amt = tipInfo.totalAmount.toFixed(2);
+              const count = tipInfo.tipCount;
+              const flexUrl = `https://www.shyft.lol/tip?user=${encodeURIComponent(myName)}&amount=${amt}&tips=${count}`;
+              const flexText = `💸 @${myName} earned ${amt} SOL in tips${count > 1 ? ` from ${count} tips` : ""} on a single post on Shyft!\n\nGet tipped for your posts →`;
+              if (navigator.share) {
+                try {
+                  await navigator.share({ title: `💸 @${myName} earned ${amt} SOL in tips on Shyft`, text: flexText, url: flexUrl });
+                } catch {}
+              } else {
+                await navigator.clipboard.writeText(`${flexText} ${flexUrl}`);
+                toast("success", "Copied to clipboard! 💸", "Flex those earnings on X");
+              }
+            }}
+            className="touch-active flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 transition-all"
+            title="Share your tip earnings"
+          >
+            <TrendingUp className="w-4 h-4" />
+            Flex
           </button>
         )}
 
