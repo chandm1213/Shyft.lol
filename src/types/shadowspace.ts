@@ -197,6 +197,62 @@ export type Shadowspace = {
       ]
     },
     {
+      "name": "closeCommunity",
+      "discriminator": [
+        193,
+        80,
+        180,
+        65,
+        226,
+        240,
+        125,
+        104
+      ],
+      "accounts": [
+        {
+          "name": "community",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  109,
+                  109,
+                  117,
+                  110,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "communityId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "communityId",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "closeMessage",
       "docs": [
         "Close a legacy message account and return rent"
@@ -678,6 +734,102 @@ export type Shadowspace = {
       ]
     },
     {
+      "name": "createCommunity",
+      "discriminator": [
+        203,
+        214,
+        176,
+        194,
+        13,
+        207,
+        22,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "community",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  109,
+                  109,
+                  117,
+                  110,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "communityId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creatorProfile",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "communityId",
+          "type": "u64"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "name": "avatarUrl",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "createPost",
       "discriminator": [
         123,
@@ -951,6 +1103,233 @@ export type Shadowspace = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "joinCommunity",
+      "discriminator": [
+        252,
+        106,
+        147,
+        30,
+        134,
+        74,
+        28,
+        232
+      ],
+      "accounts": [
+        {
+          "name": "membership",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  109,
+                  98,
+                  101,
+                  114,
+                  115,
+                  104,
+                  105,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "community"
+              },
+              {
+                "kind": "account",
+                "path": "member_profile.owner",
+                "account": "profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "community",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  109,
+                  109,
+                  117,
+                  110,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "communityId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "memberProfile",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "communityId",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "leaveCommunity",
+      "discriminator": [
+        218,
+        140,
+        41,
+        66,
+        8,
+        140,
+        33,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "membership",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  109,
+                  98,
+                  101,
+                  114,
+                  115,
+                  104,
+                  105,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "community"
+              },
+              {
+                "kind": "account",
+                "path": "member_profile.owner",
+                "account": "profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "community",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  109,
+                  109,
+                  117,
+                  110,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "communityId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "memberProfile",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "communityId",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "likePost",
@@ -1408,6 +1787,66 @@ export type Shadowspace = {
       "args": []
     },
     {
+      "name": "updateCommunity",
+      "discriminator": [
+        250,
+        158,
+        38,
+        207,
+        116,
+        171,
+        210,
+        51
+      ],
+      "accounts": [
+        {
+          "name": "community",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  109,
+                  109,
+                  117,
+                  110,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "communityId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "communityId",
+          "type": "u64"
+        },
+        {
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "name": "avatarUrl",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "updateProfile",
       "discriminator": [
         98,
@@ -1510,6 +1949,19 @@ export type Shadowspace = {
       ]
     },
     {
+      "name": "community",
+      "discriminator": [
+        192,
+        73,
+        211,
+        158,
+        178,
+        81,
+        19,
+        112
+      ]
+    },
+    {
       "name": "followAccount",
       "discriminator": [
         174,
@@ -1520,6 +1972,19 @@ export type Shadowspace = {
         84,
         148,
         209
+      ]
+    },
+    {
+      "name": "membership",
+      "discriminator": [
+        231,
+        141,
+        180,
+        98,
+        109,
+        168,
+        175,
+        166
       ]
     },
     {
@@ -1605,6 +2070,11 @@ export type Shadowspace = {
       "code": 6005,
       "name": "invalidAmount",
       "msg": "Invalid amount"
+    },
+    {
+      "code": 6006,
+      "name": "communityFull",
+      "msg": "Community is full (max 100 members)"
     }
   ],
   "types": [
@@ -1665,6 +2135,42 @@ export type Shadowspace = {
       }
     },
     {
+      "name": "community",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "communityId",
+            "type": "u64"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "name": "avatarUrl",
+            "type": "string"
+          },
+          {
+            "name": "memberCount",
+            "type": "u32"
+          },
+          {
+            "name": "createdAt",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "followAccount",
       "type": {
         "kind": "struct",
@@ -1676,6 +2182,26 @@ export type Shadowspace = {
           {
             "name": "following",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "membership",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "community",
+            "type": "pubkey"
+          },
+          {
+            "name": "member",
+            "type": "pubkey"
+          },
+          {
+            "name": "joinedAt",
+            "type": "i64"
           }
         ]
       }

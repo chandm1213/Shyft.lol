@@ -46,6 +46,8 @@ const MESSAGE_SEED = Buffer.from("message");
 const FOLLOW_SEED = Buffer.from("follow");
 const COMMENT_SEED = Buffer.from("comment");
 const REACTION_SEED = Buffer.from("reaction");
+const COMMUNITY_SEED = Buffer.from("community");
+const MEMBERSHIP_SEED = Buffer.from("membership");
 
 // ========== Simple In-Memory Cache ==========
 
@@ -188,7 +190,13 @@ function getReactionPda(postPda: PublicKey, user: PublicKey): [PublicKey, number
   return PublicKey.findProgramAddressSync([REACTION_SEED, postPda.toBuffer(), user.toBuffer()], PROGRAM_ID);
 }
 
+function getCommunityPda(communityId: number): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([COMMUNITY_SEED, toLEBytes(communityId)], PROGRAM_ID);
+}
 
+function getMembershipPda(communityPda: PublicKey, member: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([MEMBERSHIP_SEED, communityPda.toBuffer(), member.toBuffer()], PROGRAM_ID);
+}
 
 export class ShyftClient {
   program: Program;
@@ -1377,6 +1385,146 @@ export class ShyftClient {
       }))
       .slice(0, 10); // max 10 results
   }
+
+  // ========== COMMUNITIES ==========
+
+  async createCommunity(communityId: number, name: string, description: string, avatarUrl: string): Promise<string> {
+    const user = this.provider.wallet.publicKey;
+    const [communityPda] = getCommunityPda(communityId);
+    const [creatorProfilePda] = getProfilePda(user);
+    const treasury = await getTreasuryPubkey();
+
+    const ix = await this.program.methods
+      .createCommunity(new BN(communityId), name, description, compressIpfsUrl(avatarUrl))
+      .accounts({
+        community: communityPda,
+        creatorProfile: creatorProfilePda,
+        user,
+        payer: treasury,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = treasury;
+    tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+    const signed = await this.provider.wallet.signTransaction(tx);
+    const sig = await sponsorTransaction(signed, user.toBase58());
+    rpcCache.invalidate("allCommunities");
+    return sig;
+  }
+
+  async joinCommunity(communityId: number): Promise<string> {
+    const user = this.provider.wallet.publicKey;
+    const [communityPda] = getCommunityPda(communityId);
+    const [memberProfilePda] = getProfilePda(user);
+    const [membershipPda] = getMembershipPda(communityPda, user);
+    const treasury = await getTreasuryPubkey();
+
+    const ix = await this.program.methods
+      .joinCommunity(new BN(communityId))
+      .accounts({
+        membership: membershipPda,
+        community: communityPda,
+        memberProfile: memberProfilePda,
+        user,
+        payer: treasury,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = treasury;
+    tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+    const signed = await this.provider.wallet.signTransaction(tx);
+    const sig = await sponsorTransaction(signed, user.toBase58());
+    rpcCache.invalidate("allCommunities");
+    rpcCache.invalidate("allMemberships");
+    return sig;
+  }
+
+  async leaveCommunity(communityId: number): Promise<string> {
+    const user = this.provider.wallet.publicKey;
+    const [communityPda] = getCommunityPda(communityId);
+    const [memberProfilePda] = getProfilePda(user);
+    const [membershipPda] = getMembershipPda(communityPda, user);
+    const treasury = await getTreasuryPubkey();
+
+    const ix = await this.program.methods
+      .leaveCommunity(new BN(communityId))
+      .accounts({
+        membership: membershipPda,
+        community: communityPda,
+        memberProfile: memberProfilePda,
+        user,
+        treasury,
+      })
+      .instruction();
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = treasury;
+    tx.recentBlockhash = (await this.provider.connection.getLatestBlockhash()).blockhash;
+    const signed = await this.provider.wallet.signTransaction(tx);
+    const sig = await sponsorTransaction(signed, user.toBase58());
+    rpcCache.invalidate("allCommunities");
+    rpcCache.invalidate("allMemberships");
+    return sig;
+  }
+
+  async getAllCommunities(): Promise<any[]> {
+    const cacheKey = "allCommunities";
+    const cached = rpcCache.get<any[]>(cacheKey);
+    if (cached) return cached;
+    try {
+      const all = await this.program.account.community.all();
+      const result = all.map((a: any) => ({
+        pubkey: a.publicKey.toBase58(),
+        creator: a.account.creator.toBase58(),
+        communityId: Number(a.account.communityId),
+        name: a.account.name,
+        description: a.account.description,
+        avatarUrl: expandIpfsUrl(a.account.avatarUrl),
+        memberCount: a.account.memberCount,
+        createdAt: Number(a.account.createdAt) * 1000,
+      }));
+      rpcCache.set(cacheKey, result);
+      return result;
+    } catch (err) {
+      console.error("getAllCommunities error:", err);
+      return [];
+    }
+  }
+
+  async getAllMemberships(): Promise<any[]> {
+    const cacheKey = "allMemberships";
+    const cached = rpcCache.get<any[]>(cacheKey);
+    if (cached) return cached;
+    try {
+      const all = await this.program.account.membership.all();
+      const result = all.map((a: any) => ({
+        community: a.account.community.toBase58(),
+        member: a.account.member.toBase58(),
+        joinedAt: Number(a.account.joinedAt) * 1000,
+      }));
+      rpcCache.set(cacheKey, result);
+      return result;
+    } catch (err) {
+      console.error("getAllMemberships error:", err);
+      return [];
+    }
+  }
+
+  async isMember(communityId: number, userPubkey?: PublicKey): Promise<boolean> {
+    const user = userPubkey || this.provider.wallet.publicKey;
+    const [communityPda] = getCommunityPda(communityId);
+    const [membershipPda] = getMembershipPda(communityPda, user);
+    try {
+      await this.program.account.membership.fetch(membershipPda);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 /** Derive a deterministic chat ID from two public keys.
@@ -1400,6 +1548,8 @@ export {
   getChatPda,
   getMessagePda,
   getFollowPda,
+  getCommunityPda,
+  getMembershipPda,
   toLEBytes,
   PROGRAM_ID,
 };

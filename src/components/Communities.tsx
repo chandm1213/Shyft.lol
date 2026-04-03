@@ -1,0 +1,506 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { Users, Plus, LogIn, LogOut, RefreshCw, Crown, Search, X, Image as ImageIcon } from "lucide-react";
+import { useAppStore } from "@/lib/store";
+import { toast } from "@/components/Toast";
+import { useProgram } from "@/hooks/useProgram";
+import { useWallet } from "@/hooks/usePrivyWallet";
+import { clearRpcCache } from "@/lib/program";
+
+interface CommunityData {
+  pubkey: string;
+  creator: string;
+  communityId: number;
+  name: string;
+  description: string;
+  avatarUrl: string;
+  memberCount: number;
+  createdAt: number;
+}
+
+interface MembershipData {
+  community: string; // community PDA pubkey
+  member: string;
+  joinedAt: number;
+}
+
+export default function Communities() {
+  const { isConnected } = useAppStore();
+  const program = useProgram();
+  const { publicKey } = useWallet();
+
+  const [communities, setCommunities] = useState<CommunityData[]>([]);
+  const [memberships, setMemberships] = useState<MembershipData[]>([]);
+  const [profileMap, setProfileMap] = useState<Record<string, any>>({});
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState<number | null>(null);
+  const [leaving, setLeaving] = useState<number | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCommunity, setSelectedCommunity] = useState<CommunityData | null>(null);
+
+  // Create form
+  const [newName, setNewName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newAvatarUrl, setNewAvatarUrl] = useState("");
+
+  const walletAddr = publicKey?.toBase58() || "";
+
+  const fetchData = useCallback(async () => {
+    if (!program) return;
+    setLoading(true);
+    clearRpcCache();
+    try {
+      const [comms, membs, profiles] = await Promise.all([
+        program.getAllCommunities(),
+        program.getAllMemberships(),
+        program.getAllProfiles(),
+      ]);
+      setCommunities(comms);
+      setMemberships(membs);
+      const pMap: Record<string, any> = {};
+      for (const p of profiles) {
+        pMap[p.owner] = p;
+      }
+      setProfileMap(pMap);
+    } catch (err) {
+      console.error("Failed to fetch communities:", err);
+    }
+    setLoading(false);
+  }, [program]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const myMemberships = memberships.filter((m) => m.member === walletAddr);
+  const isMemberOf = (communityPubkey: string) => myMemberships.some((m) => m.community === communityPubkey);
+  const isCreatorOf = (community: CommunityData) => community.creator === walletAddr;
+
+  const getMembersOf = (communityPubkey: string) =>
+    memberships.filter((m) => m.community === communityPubkey);
+
+  const filteredCommunities = communities.filter(
+    (c) =>
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleCreate = async () => {
+    if (!program || !newName.trim()) return;
+    setCreating(true);
+    try {
+      const communityId = Date.now();
+      await program.createCommunity(communityId, newName.trim(), newDescription.trim(), newAvatarUrl.trim());
+      toast("success", `Community "${newName}" created!`);
+      setNewName("");
+      setNewDescription("");
+      setNewAvatarUrl("");
+      setShowCreate(false);
+      await fetchData();
+    } catch (err: any) {
+      console.error("Create community error:", err);
+      toast("error", err?.message?.includes("rejected") ? "Transaction rejected" : "Failed to create community");
+    }
+    setCreating(false);
+  };
+
+  const handleJoin = async (community: CommunityData) => {
+    if (!program) return;
+    setJoining(community.communityId);
+    try {
+      await program.joinCommunity(community.communityId);
+      toast("success", `Joined "${community.name}"!`);
+      await fetchData();
+    } catch (err: any) {
+      console.error("Join error:", err);
+      if (err?.message?.includes("already in use")) {
+        toast("error", "Already a member!");
+      } else {
+        toast("error", err?.message?.includes("rejected") ? "Transaction rejected" : "Failed to join");
+      }
+    }
+    setJoining(null);
+  };
+
+  const handleLeave = async (community: CommunityData) => {
+    if (!program) return;
+    setLeaving(community.communityId);
+    try {
+      await program.leaveCommunity(community.communityId);
+      toast("success", `Left "${community.name}"`);
+      if (selectedCommunity?.communityId === community.communityId) {
+        setSelectedCommunity(null);
+      }
+      await fetchData();
+    } catch (err: any) {
+      console.error("Leave error:", err);
+      toast("error", err?.message?.includes("rejected") ? "Transaction rejected" : "Failed to leave");
+    }
+    setLeaving(null);
+  };
+
+  const timeAgo = (ts: number) => {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
+
+  // ========== Detail View ==========
+  if (selectedCommunity) {
+    const members = getMembersOf(selectedCommunity.pubkey);
+    const isMember = isMemberOf(selectedCommunity.pubkey);
+    const isCreator = isCreatorOf(selectedCommunity);
+
+    return (
+      <div className="max-w-2xl mx-auto space-y-4">
+        {/* Back button */}
+        <button
+          onClick={() => setSelectedCommunity(null)}
+          className="text-sm text-[#64748B] hover:text-[#1A1A2E] flex items-center gap-1 transition-colors"
+        >
+          ← Back to Communities
+        </button>
+
+        {/* Community Header */}
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center text-white text-2xl font-bold overflow-hidden shrink-0">
+              {selectedCommunity.avatarUrl ? (
+                <img src={selectedCommunity.avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                selectedCommunity.name.charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold text-[#1A1A2E] truncate">{selectedCommunity.name}</h2>
+                {isCreator && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#FEF3C7] text-[#B45309] px-2 py-0.5 rounded-full">
+                    <Crown className="w-3 h-3" /> Creator
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-[#64748B] mt-1">{selectedCommunity.description || "No description"}</p>
+              <div className="flex items-center gap-4 mt-3 text-xs text-[#94A3B8]">
+                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {selectedCommunity.memberCount} member{selectedCommunity.memberCount !== 1 ? "s" : ""}</span>
+                <span>Created {timeAgo(selectedCommunity.createdAt)}</span>
+              </div>
+            </div>
+            <div className="shrink-0">
+              {isMember ? (
+                <button
+                  onClick={() => handleLeave(selectedCommunity)}
+                  disabled={leaving === selectedCommunity.communityId || isCreator}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#FEE2E2] text-[#DC2626] rounded-xl hover:bg-[#FECACA] transition-colors disabled:opacity-50"
+                  title={isCreator ? "Creator cannot leave" : "Leave community"}
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  {leaving === selectedCommunity.communityId ? "Leaving..." : "Leave"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleJoin(selectedCommunity)}
+                  disabled={joining === selectedCommunity.communityId}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#2563EB] text-white rounded-xl hover:bg-[#1D4ED8] transition-colors disabled:opacity-50"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  {joining === selectedCommunity.communityId ? "Joining..." : "Join"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Members List */}
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4">
+          <h3 className="text-sm font-semibold text-[#1A1A2E] mb-3">Members ({members.length})</h3>
+          {members.length === 0 ? (
+            <p className="text-sm text-[#94A3B8] text-center py-4">No members yet</p>
+          ) : (
+            <div className="space-y-2">
+              {members.map((m) => {
+                const profile = profileMap[m.member];
+                const isOwner = m.member === selectedCommunity.creator;
+                return (
+                  <div key={m.member} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#F8FAFC] transition-colors">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#2563EB] to-[#16A34A] flex items-center justify-center text-white text-xs font-bold overflow-hidden">
+                      {profile?.avatarUrl ? (
+                        <img src={profile.avatarUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        (profile?.username || m.member.slice(0, 2)).charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold text-[#1A1A2E] truncate">
+                          {profile?.displayName || profile?.username || m.member.slice(0, 8) + "..."}
+                        </span>
+                        {isOwner && <Crown className="w-3.5 h-3.5 text-[#F59E0B]" />}
+                      </div>
+                      <span className="text-xs text-[#94A3B8]">
+                        @{profile?.username || m.member.slice(0, 8)}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-[#94A3B8]">{timeAgo(m.joinedAt)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ========== Main List View ==========
+  return (
+    <div className="max-w-2xl mx-auto space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-[#1A1A2E]">Communities</h2>
+          <p className="text-xs text-[#94A3B8]">On-chain communities — max 100 members each</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="p-2 rounded-xl text-[#64748B] hover:bg-[#F1F5F9] transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#2563EB] text-white rounded-xl hover:bg-[#1D4ED8] transition-colors shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" /> Create
+          </button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+        <input
+          type="text"
+          placeholder="Search communities..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-[#E2E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] text-[#1A1A2E] placeholder-[#94A3B8]"
+        />
+      </div>
+
+      {/* My Communities */}
+      {myMemberships.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#94A3B8] mb-2">My Communities</p>
+          <div className="space-y-2">
+            {communities
+              .filter((c) => isMemberOf(c.pubkey))
+              .map((c) => (
+                <CommunityCard
+                  key={c.communityId}
+                  community={c}
+                  isMember={true}
+                  isCreator={isCreatorOf(c)}
+                  joining={joining === c.communityId}
+                  leaving={leaving === c.communityId}
+                  onJoin={() => handleJoin(c)}
+                  onLeave={() => handleLeave(c)}
+                  onClick={() => setSelectedCommunity(c)}
+                  creatorProfile={profileMap[c.creator]}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* All Communities */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-[#94A3B8] mb-2">
+          {myMemberships.length > 0 ? "Discover" : "All Communities"}
+        </p>
+        {loading ? (
+          <div className="text-center py-12">
+            <RefreshCw className="w-6 h-6 text-[#94A3B8] animate-spin mx-auto mb-2" />
+            <p className="text-sm text-[#94A3B8]">Loading communities...</p>
+          </div>
+        ) : filteredCommunities.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-2xl border border-[#E2E8F0]">
+            <Users className="w-10 h-10 text-[#94A3B8] mx-auto mb-3" />
+            <p className="text-sm font-semibold text-[#1A1A2E]">
+              {searchQuery ? "No communities found" : "No communities yet"}
+            </p>
+            <p className="text-xs text-[#94A3B8] mt-1">
+              {searchQuery ? "Try a different search" : "Be the first to create one!"}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredCommunities
+              .filter((c) => !isMemberOf(c.pubkey))
+              .map((c) => (
+                <CommunityCard
+                  key={c.communityId}
+                  community={c}
+                  isMember={false}
+                  isCreator={false}
+                  joining={joining === c.communityId}
+                  leaving={leaving === c.communityId}
+                  onJoin={() => handleJoin(c)}
+                  onLeave={() => handleLeave(c)}
+                  onClick={() => setSelectedCommunity(c)}
+                  creatorProfile={profileMap[c.creator]}
+                />
+              ))}
+          </div>
+        )}
+      </div>
+
+      {/* Create Modal */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4" onClick={() => setShowCreate(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#1A1A2E]">Create Community</h3>
+              <button onClick={() => setShowCreate(false)} className="p-1 rounded-lg hover:bg-[#F1F5F9]">
+                <X className="w-5 h-5 text-[#64748B]" />
+              </button>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-[#64748B] mb-1 block">Name *</label>
+              <input
+                type="text"
+                placeholder="e.g. Solana Builders"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value.slice(0, 32))}
+                className="w-full px-4 py-2.5 text-sm bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] text-[#1A1A2E] placeholder-[#94A3B8]"
+              />
+              <p className="text-[10px] text-[#94A3B8] mt-1">{newName.length}/32</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-[#64748B] mb-1 block">Description</label>
+              <textarea
+                placeholder="What's this community about?"
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value.slice(0, 128))}
+                rows={3}
+                className="w-full px-4 py-2.5 text-sm bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] text-[#1A1A2E] placeholder-[#94A3B8] resize-none"
+              />
+              <p className="text-[10px] text-[#94A3B8] mt-1">{newDescription.length}/128</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-[#64748B] mb-1 block">Avatar URL (optional)</label>
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-[#94A3B8]" />
+                <input
+                  type="text"
+                  placeholder="https://..."
+                  value={newAvatarUrl}
+                  onChange={(e) => setNewAvatarUrl(e.target.value)}
+                  className="flex-1 px-4 py-2.5 text-sm bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] text-[#1A1A2E] placeholder-[#94A3B8]"
+                />
+              </div>
+            </div>
+
+            <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded-xl p-3">
+              <p className="text-xs text-[#16A34A] font-medium">✨ Free to create — sponsored by Shyft</p>
+              <p className="text-[10px] text-[#64748B] mt-0.5">Max 100 members per community. You&apos;ll auto-join as the first member.</p>
+            </div>
+
+            <button
+              onClick={handleCreate}
+              disabled={creating || !newName.trim()}
+              className="w-full py-3 text-sm font-semibold bg-[#2563EB] text-white rounded-xl hover:bg-[#1D4ED8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creating ? "Creating..." : "Create Community"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ========== Community Card Component ==========
+
+function CommunityCard({
+  community,
+  isMember,
+  isCreator,
+  joining,
+  leaving,
+  onJoin,
+  onLeave,
+  onClick,
+  creatorProfile,
+}: {
+  community: CommunityData;
+  isMember: boolean;
+  isCreator: boolean;
+  joining: boolean;
+  leaving: boolean;
+  onJoin: () => void;
+  onLeave: () => void;
+  onClick: () => void;
+  creatorProfile?: any;
+}) {
+  return (
+    <div
+      className="bg-white rounded-2xl border border-[#E2E8F0] p-4 hover:border-[#2563EB]/30 hover:shadow-sm transition-all cursor-pointer"
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center text-white text-lg font-bold overflow-hidden shrink-0">
+          {community.avatarUrl ? (
+            <img src={community.avatarUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            community.name.charAt(0).toUpperCase()
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-[#1A1A2E] truncate">{community.name}</h3>
+            {isCreator && <Crown className="w-3.5 h-3.5 text-[#F59E0B]" />}
+          </div>
+          <p className="text-xs text-[#64748B] truncate">{community.description || "No description"}</p>
+          <div className="flex items-center gap-3 mt-1 text-[10px] text-[#94A3B8]">
+            <span className="flex items-center gap-0.5"><Users className="w-3 h-3" /> {community.memberCount}/100</span>
+            <span>by @{creatorProfile?.username || community.creator.slice(0, 8)}</span>
+          </div>
+        </div>
+        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+          {isMember ? (
+            <button
+              onClick={onLeave}
+              disabled={leaving || isCreator}
+              className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-semibold bg-[#F1F5F9] text-[#64748B] rounded-lg hover:bg-[#FEE2E2] hover:text-[#DC2626] transition-colors disabled:opacity-50"
+              title={isCreator ? "Creator cannot leave" : "Leave"}
+            >
+              {leaving ? "..." : "Joined ✓"}
+            </button>
+          ) : (
+            <button
+              onClick={onJoin}
+              disabled={joining || community.memberCount >= 100}
+              className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-semibold bg-[#2563EB] text-white rounded-lg hover:bg-[#1D4ED8] transition-colors disabled:opacity-50"
+            >
+              {joining ? "..." : community.memberCount >= 100 ? "Full" : "Join"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -9,6 +9,8 @@ pub const MESSAGE_SEED: &[u8] = b"message";
 pub const FOLLOW_SEED: &[u8] = b"follow";
 pub const COMMENT_SEED: &[u8] = b"comment";
 pub const REACTION_SEED: &[u8] = b"reaction";
+pub const COMMUNITY_SEED: &[u8] = b"community";
+pub const MEMBERSHIP_SEED: &[u8] = b"membership";
 
 #[program]
 pub mod shadowspace {
@@ -163,6 +165,70 @@ pub mod shadowspace {
         let chat = &mut ctx.accounts.chat;
         chat.message_count += 1;
         msg!("Message sent in chat {}", chat_id);
+        Ok(())
+    }
+
+    // ========== COMMUNITIES ==========
+
+    pub fn create_community(
+        ctx: Context<CreateCommunity>,
+        community_id: u64,
+        name: String,
+        description: String,
+        avatar_url: String,
+    ) -> Result<()> {
+        require!(name.len() <= 32, ShadowError::ContentTooLong);
+        require!(description.len() <= 128, ShadowError::ContentTooLong);
+        require!(avatar_url.len() <= 128, ShadowError::ContentTooLong);
+        let community = &mut ctx.accounts.community;
+        community.creator = ctx.accounts.creator_profile.owner;
+        community.community_id = community_id;
+        community.name = name;
+        community.description = description;
+        community.avatar_url = avatar_url;
+        community.member_count = 1; // creator auto-joins
+        community.created_at = Clock::get()?.unix_timestamp;
+        msg!("Community {} created by {}", community.community_id, community.creator);
+        Ok(())
+    }
+
+    pub fn join_community(ctx: Context<JoinCommunity>, _community_id: u64) -> Result<()> {
+        let community = &mut ctx.accounts.community;
+        require!(community.member_count < 100, ShadowError::CommunityFull);
+        let community_key = community.key();
+        community.member_count += 1;
+        let membership = &mut ctx.accounts.membership;
+        membership.community = community_key;
+        membership.member = ctx.accounts.member_profile.owner;
+        membership.joined_at = Clock::get()?.unix_timestamp;
+        msg!("{} joined community {}", membership.member, _community_id);
+        Ok(())
+    }
+
+    pub fn leave_community(ctx: Context<LeaveCommunity>, _community_id: u64) -> Result<()> {
+        let community = &mut ctx.accounts.community;
+        community.member_count = community.member_count.saturating_sub(1);
+        msg!("{} left community {}", ctx.accounts.member_profile.owner, community.community_id);
+        Ok(())
+    }
+
+    pub fn update_community(
+        ctx: Context<UpdateCommunity>,
+        _community_id: u64,
+        description: String,
+        avatar_url: String,
+    ) -> Result<()> {
+        require!(description.len() <= 128, ShadowError::ContentTooLong);
+        require!(avatar_url.len() <= 128, ShadowError::ContentTooLong);
+        let community = &mut ctx.accounts.community;
+        community.description = description;
+        community.avatar_url = avatar_url;
+        msg!("Community {} updated", community.community_id);
+        Ok(())
+    }
+
+    pub fn close_community(ctx: Context<CloseCommunity>, _community_id: u64) -> Result<()> {
+        msg!("Community {} closed by creator", ctx.accounts.community.community_id);
         Ok(())
     }
 
@@ -437,6 +503,86 @@ pub struct UnfollowUser<'info> {
     pub treasury: AccountInfo<'info>,
 }
 
+// ========== COMMUNITY CONTEXTS ==========
+
+#[derive(Accounts)]
+#[instruction(community_id: u64)]
+pub struct CreateCommunity<'info> {
+    #[account(init, payer = payer, space = 8 + Community::LEN, seeds = [COMMUNITY_SEED, &community_id.to_le_bytes()], bump)]
+    pub community: Account<'info, Community>,
+    #[account(seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
+    pub creator_profile: Account<'info, Profile>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(community_id: u64)]
+pub struct JoinCommunity<'info> {
+    #[account(init, payer = payer, space = 8 + Membership::LEN, seeds = [MEMBERSHIP_SEED, community.key().as_ref(), member_profile.owner.as_ref()], bump)]
+    pub membership: Account<'info, Membership>,
+    #[account(mut, seeds = [COMMUNITY_SEED, &community_id.to_le_bytes()], bump)]
+    pub community: Account<'info, Community>,
+    #[account(seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
+    pub member_profile: Account<'info, Profile>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(community_id: u64)]
+pub struct LeaveCommunity<'info> {
+    #[account(mut, close = treasury, seeds = [MEMBERSHIP_SEED, community.key().as_ref(), member_profile.owner.as_ref()], bump)]
+    pub membership: Account<'info, Membership>,
+    #[account(mut, seeds = [COMMUNITY_SEED, &community_id.to_le_bytes()], bump)]
+    pub community: Account<'info, Community>,
+    #[account(seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
+    pub member_profile: Account<'info, Profile>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    /// CHECK: Treasury for rent refund
+    #[account(mut)]
+    pub treasury: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(community_id: u64)]
+pub struct UpdateCommunity<'info> {
+    #[account(
+        mut,
+        seeds = [COMMUNITY_SEED, &community_id.to_le_bytes()],
+        bump,
+        constraint = community.creator == user.key() @ ShadowError::Unauthorized
+    )]
+    pub community: Account<'info, Community>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(community_id: u64)]
+pub struct CloseCommunity<'info> {
+    #[account(
+        mut,
+        close = treasury,
+        seeds = [COMMUNITY_SEED, &community_id.to_le_bytes()],
+        bump,
+        constraint = community.creator == user.key() @ ShadowError::Unauthorized
+    )]
+    pub community: Account<'info, Community>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    /// CHECK: Treasury for rent refund
+    #[account(mut)]
+    pub treasury: AccountInfo<'info>,
+}
+
 // ========== CLOSE ACCOUNT CONTEXTS ==========
 
 #[derive(Accounts)]
@@ -642,6 +788,34 @@ impl FollowAccount {
     pub const LEN: usize = 32 + 32;
 }
 
+#[account]
+pub struct Community {
+    pub creator: Pubkey,
+    pub community_id: u64,
+    pub name: String,
+    pub description: String,
+    pub avatar_url: String,
+    pub member_count: u32,
+    pub created_at: i64,
+}
+
+impl Community {
+    // 32(creator) + 8(id) + (4+32)(name) + (4+128)(desc) + (4+128)(avatar) + 4(members) + 8(created)
+    pub const LEN: usize = 32 + 8 + 4 + 32 + 4 + 128 + 4 + 128 + 4 + 8;
+}
+
+#[account]
+pub struct Membership {
+    pub community: Pubkey,
+    pub member: Pubkey,
+    pub joined_at: i64,
+}
+
+impl Membership {
+    // 32(community) + 32(member) + 8(joined_at)
+    pub const LEN: usize = 32 + 32 + 8;
+}
+
 // ========== ERRORS ==========
 
 #[error_code]
@@ -658,4 +832,6 @@ pub enum ShadowError {
     CannotFollowSelf,
     #[msg("Invalid amount")]
     InvalidAmount,
+    #[msg("Community is full (max 100 members)")]
+    CommunityFull,
 }

@@ -12,6 +12,7 @@ import Profile from "@/components/Profile";
 import CreatorDashboard from "@/components/CreatorDashboard";
 import Friends from "@/components/Friends";
 import Tokens from "@/components/Tokens";
+import Communities from "@/components/Communities";
 import ToastContainer from "@/components/Toast";
 import Landing from "@/components/Landing";
 import OnboardingDemo from "@/components/OnboardingDemo";
@@ -107,6 +108,7 @@ export default function Home() {
           {activeTab === "chat" && <Chat />}
           {activeTab === "friends" && <Friends />}
           {activeTab === "tokens" && <Tokens />}
+          {activeTab === "communities" && <Communities />}
           {activeTab === "payments" && <Payments />}
           {activeTab === "dashboard" && <CreatorDashboard />}
           {activeTab === "profile" && <Profile />}
