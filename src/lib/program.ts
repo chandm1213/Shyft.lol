@@ -1476,7 +1476,7 @@ export class ShyftClient {
     const cached = rpcCache.get<any[]>(cacheKey);
     if (cached) return cached;
     try {
-      const all = await this.program.account.community.all();
+      const all = await this.accounts.community.all();
       const result = all.map((a: any) => ({
         pubkey: a.publicKey.toBase58(),
         creator: a.account.creator.toBase58(),
@@ -1500,7 +1500,7 @@ export class ShyftClient {
     const cached = rpcCache.get<any[]>(cacheKey);
     if (cached) return cached;
     try {
-      const all = await this.program.account.membership.all();
+      const all = await this.accounts.membership.all();
       const result = all.map((a: any) => ({
         community: a.account.community.toBase58(),
         member: a.account.member.toBase58(),
@@ -1519,7 +1519,7 @@ export class ShyftClient {
     const [communityPda] = getCommunityPda(communityId);
     const [membershipPda] = getMembershipPda(communityPda, user);
     try {
-      await this.program.account.membership.fetch(membershipPda);
+      await this.accounts.membership.fetch(membershipPda);
       return true;
     } catch {
       return false;
