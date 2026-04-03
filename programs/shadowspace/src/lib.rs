@@ -28,6 +28,8 @@ pub mod shadowspace {
         bio: String,
     ) -> Result<()> {
         let profile = &mut ctx.accounts.profile;
+        // Prevent re-initialization — created_at == 0 means fresh account
+        require!(profile.created_at == 0, ShadowError::AlreadyInitialized);
         profile.owner = ctx.accounts.user.key();
         profile.username = username;
         profile.display_name = display_name;
@@ -84,6 +86,8 @@ pub mod shadowspace {
     ) -> Result<()> {
         require!(content.len() <= 500, ShadowError::ContentTooLong);
         let post = &mut ctx.accounts.post;
+        // Prevent re-initialization — don't overwrite existing posts
+        require!(post.created_at == 0, ShadowError::AlreadyInitialized);
         post.author = ctx.accounts.profile.owner;
         post.post_id = post_id;
         post.content = content;
@@ -112,6 +116,8 @@ pub mod shadowspace {
     ) -> Result<()> {
         require!(content.len() <= 100, ShadowError::ContentTooLong);
         let comment = &mut ctx.accounts.comment;
+        // Prevent re-initialization — don't overwrite existing comments
+        require!(comment.created_at == 0, ShadowError::AlreadyInitialized);
         comment.post = ctx.accounts.post.key();
         comment.author = ctx.accounts.commenter_profile.owner;
         comment.comment_index = comment_index;
@@ -140,6 +146,8 @@ pub mod shadowspace {
 
     pub fn create_chat(ctx: Context<CreateChat>, chat_id: u64) -> Result<()> {
         let chat = &mut ctx.accounts.chat;
+        // Prevent re-initialization — don't let anyone hijack existing chats
+        require!(chat.created_at == 0, ShadowError::AlreadyInitialized);
         chat.chat_id = chat_id;
         chat.user1 = ctx.accounts.user1.key();
         chat.user2 = ctx.accounts.user2.key();
@@ -158,6 +166,8 @@ pub mod shadowspace {
         payment_amount: u64,
     ) -> Result<()> {
         let message = &mut ctx.accounts.message;
+        // Prevent re-initialization — don't overwrite existing messages
+        require!(message.timestamp == 0, ShadowError::AlreadyInitialized);
         message.chat_id = chat_id;
         message.sender = ctx.accounts.sender.key();
         message.content = content;
@@ -397,6 +407,8 @@ pub struct LikePost<'info> {
     pub post: Account<'info, Post>,
     #[account(seeds = [PROFILE_SEED, profile.owner.as_ref()], bump)]
     pub profile: Account<'info, Profile>,
+    /// The liker — must be the profile owner
+    #[account(constraint = user.key() == profile.owner @ ShadowError::Unauthorized)]
     pub user: Signer<'info>,
 }
 
@@ -426,7 +438,8 @@ pub struct ReactToPost<'info> {
     pub post: Account<'info, Post>,
     #[account(seeds = [PROFILE_SEED, reactor_profile.owner.as_ref()], bump)]
     pub reactor_profile: Account<'info, Profile>,
-    #[account(mut)]
+    /// The reactor — must be the reactor_profile owner
+    #[account(mut, constraint = user.key() == reactor_profile.owner @ ShadowError::Unauthorized)]
     pub user: Signer<'info>,
     #[account(mut)]
     pub payer: Signer<'info>,
@@ -841,4 +854,6 @@ pub enum ShadowError {
     InvalidAmount,
     #[msg("Community is full (max 100 members)")]
     CommunityFull,
+    #[msg("Account already initialized")]
+    AlreadyInitialized,
 }

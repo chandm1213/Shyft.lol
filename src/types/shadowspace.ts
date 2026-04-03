@@ -1402,6 +1402,9 @@ export type Shadowspace = {
         },
         {
           "name": "user",
+          "docs": [
+            "The liker — must be the profile owner"
+          ],
           "signer": true
         }
       ],
@@ -1559,6 +1562,9 @@ export type Shadowspace = {
         },
         {
           "name": "user",
+          "docs": [
+            "The reactor — must be the reactor_profile owner"
+          ],
           "writable": true,
           "signer": true
         },
@@ -2084,6 +2090,11 @@ export type Shadowspace = {
       "code": 6006,
       "name": "communityFull",
       "msg": "Community is full (max 100 members)"
+    },
+    {
+      "code": 6007,
+      "name": "alreadyInitialized",
+      "msg": "Account already initialized"
     }
   ],
   "types": [

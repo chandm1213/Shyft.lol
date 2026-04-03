@@ -1396,6 +1396,9 @@
         },
         {
           "name": "user",
+          "docs": [
+            "The liker — must be the profile owner"
+          ],
           "signer": true
         }
       ],
@@ -1553,6 +1556,9 @@
         },
         {
           "name": "user",
+          "docs": [
+            "The reactor — must be the reactor_profile owner"
+          ],
           "writable": true,
           "signer": true
         },
@@ -2078,6 +2084,11 @@
       "code": 6006,
       "name": "CommunityFull",
       "msg": "Community is full (max 100 members)"
+    },
+    {
+      "code": 6007,
+      "name": "AlreadyInitialized",
+      "msg": "Account already initialized"
     }
   ],
   "types": [
