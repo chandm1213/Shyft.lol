@@ -30,6 +30,22 @@ function parsePaidPost(content: string): { isPaid: boolean; price: number; actua
   return { isPaid: false, price: 0, actualContent: content };
 }
 
+/** Parse a community post: content starts with COMM|<communityId>|<actual content> */
+export function parseCommunityPost(content: string): { isCommunity: boolean; communityId: number; actualContent: string } {
+  if (content.startsWith("COMM|")) {
+    const firstPipe = content.indexOf("|");
+    const secondPipe = content.indexOf("|", firstPipe + 1);
+    if (secondPipe !== -1) {
+      const communityId = parseInt(content.substring(firstPipe + 1, secondPipe));
+      const actualContent = content.substring(secondPipe + 1);
+      if (!isNaN(communityId)) {
+        return { isCommunity: true, communityId, actualContent };
+      }
+    }
+  }
+  return { isCommunity: false, communityId: 0, actualContent: content };
+}
+
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
   if (seconds < 60) return "just now";
@@ -53,7 +69,7 @@ const REACTIONS = [
 ];
 
 /** Reusable on-chain post card with on-chain likes, comments & reactions */
-function OnChainPostCard({
+export function OnChainPostCard({
   post,
   profile,
   isMe,
@@ -952,8 +968,8 @@ export default function Feed() {
       setAllComments(comments);
       setAllReactions(reactions);
 
-      // Show all posts: free (public) + paid (private with PAID| prefix)
-      const visiblePosts = allMapped.filter((p: any) => !p.isPrivate || p.content.startsWith("PAID|"));
+      // Show all posts: free (public) + paid (private with PAID| prefix), exclude community posts
+      const visiblePosts = allMapped.filter((p: any) => !p.content.startsWith("COMM|") && (!p.isPrivate || p.content.startsWith("PAID|")));
       
       console.log("📊 All posts:", allMapped.length, "Visible:", visiblePosts.length);
 
@@ -993,7 +1009,7 @@ export default function Feed() {
       ]);
       setAllComments(comments);
       setAllReactions(reactions);
-      const visiblePosts = allMapped.filter((p: any) => !p.isPrivate || p.content.startsWith("PAID|"));
+      const visiblePosts = allMapped.filter((p: any) => !p.content.startsWith("COMM|") && (!p.isPrivate || p.content.startsWith("PAID|")));
       setOnchainPosts(visiblePosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
     } catch (err) {
       console.error("Failed to refresh feed:", err);

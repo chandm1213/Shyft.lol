@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Users, Plus, LogIn, LogOut, RefreshCw, Crown, Search, X, Image as ImageIcon } from "lucide-react";
+import { Users, Plus, LogIn, LogOut, RefreshCw, Crown, Search, X, Image as ImageIcon, Send, Globe } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
 import { useProgram } from "@/hooks/useProgram";
 import { useWallet } from "@/hooks/usePrivyWallet";
 import { clearRpcCache } from "@/lib/program";
+import { OnChainPostCard, parseCommunityPost } from "@/components/Feed";
+import type { ShyftClient } from "@/lib/program";
 
 interface CommunityData {
   pubkey: string;
@@ -219,6 +221,22 @@ export default function Communities() {
           </div>
         </div>
 
+        {/* Community Feed — only for members */}
+        {isMember ? (
+          <CommunityFeed
+            community={selectedCommunity}
+            program={program}
+            profileMap={profileMap}
+            walletAddr={walletAddr}
+          />
+        ) : (
+          <div className="text-center py-12 bg-white rounded-2xl border border-[#E2E8F0]">
+            <Users className="w-10 h-10 text-[#94A3B8] mx-auto mb-3" />
+            <p className="text-sm font-semibold text-[#1A1A2E]">Members Only</p>
+            <p className="text-xs text-[#94A3B8] mt-1">Join this community to see posts and start posting</p>
+          </div>
+        )}
+
         {/* Members List */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4">
           <h3 className="text-sm font-semibold text-[#1A1A2E] mb-3">Members ({members.length})</h3>
@@ -333,14 +351,14 @@ export default function Communities() {
             <RefreshCw className="w-6 h-6 text-[#94A3B8] animate-spin mx-auto mb-2" />
             <p className="text-sm text-[#94A3B8]">Loading communities...</p>
           </div>
-        ) : filteredCommunities.length === 0 ? (
+        ) : filteredCommunities.filter((c) => !isMemberOf(c.pubkey)).length === 0 ? (
           <div className="text-center py-12 bg-white rounded-2xl border border-[#E2E8F0]">
             <Users className="w-10 h-10 text-[#94A3B8] mx-auto mb-3" />
             <p className="text-sm font-semibold text-[#1A1A2E]">
-              {searchQuery ? "No communities found" : "No communities yet"}
+              {searchQuery ? "No communities found" : communities.length === 0 ? "No communities yet" : "You've joined them all!"}
             </p>
             <p className="text-xs text-[#94A3B8] mt-1">
-              {searchQuery ? "Try a different search" : "Be the first to create one!"}
+              {searchQuery ? "Try a different search" : communities.length === 0 ? "Be the first to create one!" : "Create a new one?"}
             </p>
           </div>
         ) : (
@@ -428,6 +446,161 @@ export default function Communities() {
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ========== Community Feed (posts within a community) ==========
+
+function CommunityFeed({
+  community,
+  program,
+  profileMap,
+  walletAddr,
+}: {
+  community: CommunityData;
+  program: ShyftClient | null;
+  profileMap: Record<string, any>;
+  walletAddr: string;
+}) {
+  const [posts, setPosts] = useState<any[]>([]);
+  const [allComments, setAllComments] = useState<any[]>([]);
+  const [allReactions, setAllReactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [newPost, setNewPost] = useState("");
+  const [posting, setPosting] = useState(false);
+
+  const fetchPosts = useCallback(async () => {
+    if (!program) return;
+    setLoading(true);
+    try {
+      clearRpcCache();
+      const [allPosts, comments, reactions] = await Promise.all([
+        program.getAllPosts(),
+        program.getAllComments(),
+        program.getAllReactions(),
+      ]);
+      setAllComments(comments);
+      setAllReactions(reactions);
+
+      // Filter to only this community's posts
+      const communityPosts = allPosts.filter((p: any) => {
+        const parsed = parseCommunityPost(p.content);
+        return parsed.isCommunity && parsed.communityId === community.communityId;
+      });
+
+      setPosts(communityPosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
+    } catch (err) {
+      console.error("Failed to fetch community posts:", err);
+    }
+    setLoading(false);
+  }, [program, community.communityId]);
+
+  useEffect(() => {
+    fetchPosts();
+  }, [fetchPosts]);
+
+  // Auto-refresh every 8s
+  useEffect(() => {
+    if (!program) return;
+    const interval = setInterval(fetchPosts, 8_000);
+    return () => clearInterval(interval);
+  }, [program, fetchPosts]);
+
+  const handlePost = async () => {
+    if (!newPost.trim() || posting || !program) return;
+    setPosting(true);
+    try {
+      const postId = Date.now();
+      // Prefix with COMM|communityId| so it's tagged to this community
+      const content = `COMM|${community.communityId}|${newPost.trim()}`;
+      await program.createPost(postId, content, false);
+      toast("success", "Posted to community!");
+      setNewPost("");
+      setTimeout(() => fetchPosts(), 1500);
+    } catch (err: any) {
+      console.error("Community post error:", err);
+      toast("error", err?.message?.includes("rejected") ? "Transaction rejected" : "Failed to post");
+    }
+    setPosting(false);
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Composer */}
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Globe className="w-4 h-4 text-[#7C3AED]" />
+          <span className="text-xs font-semibold text-[#7C3AED]">Post to {community.name}</span>
+        </div>
+        <div className="flex items-end gap-2">
+          <textarea
+            placeholder={`What's happening in ${community.name}?`}
+            value={newPost}
+            onChange={(e) => setNewPost(e.target.value.slice(0, 480))}
+            rows={2}
+            className="flex-1 px-3 py-2 text-sm bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED] text-[#1A1A2E] placeholder-[#94A3B8] resize-none"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handlePost();
+              }
+            }}
+          />
+          <button
+            onClick={handlePost}
+            disabled={posting || !newPost.trim()}
+            className="px-4 py-2 text-sm font-semibold bg-[#7C3AED] text-white rounded-xl hover:bg-[#6D28D9] transition-colors disabled:opacity-50 shrink-0"
+          >
+            {posting ? "..." : <Send className="w-4 h-4" />}
+          </button>
+        </div>
+        <p className="text-[10px] text-[#94A3B8] mt-1 text-right">{newPost.length}/480</p>
+      </div>
+
+      {/* Posts */}
+      {loading && posts.length === 0 ? (
+        <div className="text-center py-8">
+          <RefreshCw className="w-5 h-5 text-[#94A3B8] animate-spin mx-auto mb-2" />
+          <p className="text-xs text-[#94A3B8]">Loading posts...</p>
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="text-center py-8 bg-white rounded-2xl border border-[#E2E8F0]">
+          <p className="text-sm font-semibold text-[#1A1A2E]">No posts yet</p>
+          <p className="text-xs text-[#94A3B8] mt-1">Be the first to post in {community.name}!</p>
+        </div>
+      ) : (
+        posts.map((post: any) => {
+          // Strip the COMM|id| prefix for display
+          const { actualContent } = parseCommunityPost(post.content);
+          const displayPost = { ...post, content: actualContent };
+          const profile = profileMap[post.author];
+          const isMe = post.author === walletAddr;
+
+          return (
+            <div key={post.publicKey} className="relative">
+              {/* Community badge */}
+              <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-[#7C3AED]/10 text-[#7C3AED] px-2 py-0.5 rounded-full">
+                <Globe className="w-3 h-3" />
+                <span className="text-[10px] font-semibold">{community.name}</span>
+              </div>
+              <OnChainPostCard
+                post={displayPost}
+                profile={profile}
+                isMe={isMe}
+                program={program}
+                allComments={allComments}
+                allReactions={allReactions}
+                profileMap={profileMap}
+                onCommentAdded={fetchPosts}
+                onReactionAdded={fetchPosts}
+                onRepost={() => {}}
+                onDelete={fetchPosts}
+              />
+            </div>
+          );
+        })
       )}
     </div>
   );
