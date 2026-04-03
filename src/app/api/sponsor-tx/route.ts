@@ -19,10 +19,11 @@ import {
 const SHADOWSPACE_PROGRAM_ID = new PublicKey("EEnouVLAoQGMEbrypEhP3Ct5RgCViCWG4n1nCZNwMxjQ");
 
 // Programs allowed in instructions (SystemProgram is needed for account init/PDA creation)
+// NOTE: ATokenGP removed — was exploited to create ATAs at treasury expense.
+// Every sponsored tx MUST contain at least one Shadowspace instruction (enforced below).
 const ALLOWED_PROGRAMS = new Set([
   SHADOWSPACE_PROGRAM_ID.toBase58(),
   SystemProgram.programId.toBase58(), // 11111111111111111111111111111111
-  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", // Associated Token Program (for account creation)
   "ComputeBudget111111111111111111111111111111",     // Compute Budget (priority fees, unit limits)
   "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",  // SPL Memo Program (Phantom, Jupiter, etc.)
   "Ed25519SigVerify111111111111111111111111111",     // Ed25519 precompile (signature verification)
@@ -227,6 +228,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Transaction has too many instructions" },
         { status: 400 }
+      );
+    }
+
+    // CRITICAL: At least one instruction MUST call the Shadowspace program.
+    // This prevents abuse where someone crafts a tx using only SystemProgram
+    // or other allowed helper programs to drain the treasury.
+    const hasShadowspaceInstruction = tx.instructions.some(
+      (ix: any) => ix.programId.toBase58() === SHADOWSPACE_PROGRAM_ID.toBase58()
+    );
+    if (!hasShadowspaceInstruction) {
+      console.error(
+        `🚨 BLOCKED: Wallet ${walletAddress} sent tx with NO Shadowspace instruction — programs: ${allProgramIds}`
+      );
+      return NextResponse.json(
+        { error: "Transaction must include a Shadowspace program instruction" },
+        { status: 403 }
       );
     }
 
