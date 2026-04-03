@@ -30,20 +30,15 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "next.config.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "test-*.ts",
-    "test-*.js",
     "test-p2p/**",
-    "check-balance.ts",
-    "check-rent-mainnet.ts",
-    "close-chat.ts",
-    "nuke-chat.ts",
     "programs/**",
     "target/**"
   ]
