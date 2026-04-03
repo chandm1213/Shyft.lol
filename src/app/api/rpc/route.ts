@@ -10,10 +10,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 const HELIUS_RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY_PRIVATE}`;
 
-// Simple rate limiting — 60 requests per IP per minute
+// Simple rate limiting — 200 requests per IP per minute
 const ipTimestamps = new Map<string, number[]>();
 const WINDOW_MS = 60_000;
-const MAX_REQUESTS = 60;
+const MAX_REQUESTS = 200;
 
 function getClientIp(request: NextRequest): string {
   return (

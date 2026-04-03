@@ -1109,7 +1109,14 @@ export class ShyftClient {
    * Find the encryption public key of the OTHER participant in a chat.
    * Does DIRECT PDA lookups (no cache) to ensure fresh data.
    */
+  private _peerKeyCache = new Map<string, Uint8Array>();
+
   async findPeerEncryptionKey(chatId: number, myAddress: string): Promise<Uint8Array | null> {
+    // Return cached result if we already found the peer key for this chat
+    const cacheKey = `${chatId}:${myAddress}`;
+    const cached = this._peerKeyCache.get(cacheKey);
+    if (cached) return cached;
+
     // Scan message PDAs 0-9 directly — do NOT rely on chat.messageCount
     // because the chat account may be stale/cached even with getAccountInfo
     console.log(`findPeerEncryptionKey: chatId=${chatId}, myAddr=${myAddress.slice(0, 8)}...`);
@@ -1136,6 +1143,7 @@ export class ShyftClient {
           const key = parsePubkeyMessage(content);
           if (key && key.length === 32) {
             console.log(`  ✅ Found peer key at msg[${i}]!`);
+            this._peerKeyCache.set(cacheKey, key);
             return key;
           }
         }

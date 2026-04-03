@@ -210,10 +210,6 @@ export default function Chat() {
     if (!program || !publicKey || !encryptionKeys) return;
     setLoadingMessages(true);
     try {
-      // Invalidate message caches so we get fresh on-chain data
-      const { clearRpcCache } = await import("@/lib/program");
-      clearRpcCache();
-
       const myAddr = publicKey.toBase58();
 
       // Check if we've already published our key (read-only — actual publishing happens in handleSend)
@@ -280,7 +276,7 @@ export default function Chat() {
       loadingRef.current = true;
       await loadMessages(activeChat);
       loadingRef.current = false;
-    }, 5000);
+    }, 15000);
 
     return () => {
       if (pollRef.current) {

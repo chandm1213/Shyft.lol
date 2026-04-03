@@ -14,10 +14,14 @@ const HELIUS_MAINNET = typeof window !== "undefined"
   ? `${window.location.origin}/api/rpc`
   : `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY_PRIVATE}`;
 
+// WSS: use Helius directly for server-side only; on client we use polling instead of subscriptions.
+// We still need a valid URL for Privy config — use the private key (only available in SSR, harmless if empty client-side).
+const WSS_URL = `wss://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY_PRIVATE || "unused"}`;
+
 const solanaRpcs = {
   "solana:mainnet": {
     rpc: createSolanaRpc(HELIUS_MAINNET),
-    rpcSubscriptions: createSolanaRpcSubscriptions(`wss://mainnet.helius-rpc.com/?api-key=${process.env.NEXT_PUBLIC_HELIUS_API_KEY || process.env.HELIUS_API_KEY_PRIVATE || ""}`),
+    rpcSubscriptions: createSolanaRpcSubscriptions(WSS_URL),
     blockExplorerUrl: "https://explorer.solana.com",
   },
 } as const;
