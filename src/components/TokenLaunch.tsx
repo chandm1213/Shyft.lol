@@ -110,7 +110,7 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
       // Step 2: Create fee share config + launch tx, then batch sign
       setStep("launching");
 
-      const connection = new Connection("/api/rpc", "confirmed");
+      const connection = new Connection("/api/rpc", { commitment: "confirmed", wsEndpoint: undefined });
 
       // Create fee share config (returns unsigned txs)
       const configRes = await fetch("/api/bags", {

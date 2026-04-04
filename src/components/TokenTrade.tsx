@@ -152,7 +152,7 @@ export default function TokenTrade({
       );
       const signed = await signTransaction(tx);
 
-      const connection = new Connection("/api/rpc", "confirmed");
+      const connection = new Connection("/api/rpc", { commitment: "confirmed", wsEndpoint: undefined });
       const sig = await connection.sendRawTransaction(signed.serialize());
       await connection.confirmTransaction(sig, "confirmed");
 

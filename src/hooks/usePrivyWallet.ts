@@ -25,7 +25,14 @@ export const HELIUS_DEVNET_RPC = HELIUS_MAINNET_RPC;
 let _sharedConnection: Connection | null = null;
 export function getSharedConnection(): Connection {
   if (!_sharedConnection) {
-    _sharedConnection = new Connection(HELIUS_MAINNET_RPC, "confirmed");
+    // Disable WebSocket endpoint — Vercel doesn't support WSS, and the
+    // auto-derived wss://www.shyft.lol/api/rpc fails endlessly.
+    // All subscriptions use HTTP polling instead.
+    _sharedConnection = new Connection(HELIUS_MAINNET_RPC, {
+      commitment: "confirmed",
+      wsEndpoint: undefined,
+      disableRetryOnRateLimit: false,
+    });
   }
   return _sharedConnection;
 }

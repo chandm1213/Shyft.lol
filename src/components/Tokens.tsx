@@ -132,7 +132,7 @@ export default function Tokens() {
       const txList: { unsignedTxBase64: string }[] = data.response;
       if (!txList || txList.length === 0) throw new Error("No claim transactions returned");
 
-      const connection = new Connection("/api/rpc", "confirmed");
+      const connection = new Connection("/api/rpc", { commitment: "confirmed", wsEndpoint: undefined });
 
       toast("info", `Signing ${txList.length} claim transaction(s)...`);
 
