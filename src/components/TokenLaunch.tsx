@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { useWallet } from "@/hooks/usePrivyWallet";
+import { useWallet, pollConfirmation } from "@/hooks/usePrivyWallet";
 import { toast } from "@/components/Toast";
 import { uploadImage } from "@/components/RichContent";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
@@ -136,7 +136,7 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
         const signedConfigTxs = await signAllTransactions(configTxs);
         for (const signed of signedConfigTxs) {
           const sig = await connection.sendRawTransaction(signed.serialize());
-          await connection.confirmTransaction(sig, "confirmed");
+          await pollConfirmation(connection, sig);
         }
       }
 
@@ -162,7 +162,7 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
       );
       const signedLaunch = await signTransaction(launchTx);
       const launchSig = await connection.sendRawTransaction(signedLaunch.serialize());
-      await connection.confirmTransaction(launchSig, "confirmed");
+      await pollConfirmation(connection, launchSig);
 
       setResult({ tokenMint, metadataUrl });
       setStep("success");

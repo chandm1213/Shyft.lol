@@ -1,6 +1,7 @@
 import { Program, AnchorProvider, Idl, BorshCoder } from "@coral-xyz/anchor";
 import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 import idl from "./idl.json";
+import { pollConfirmation } from "@/hooks/usePrivyWallet";
 import {
   encryptMessage as naclEncrypt,
   decryptMessage as naclDecrypt,
@@ -805,8 +806,8 @@ export class ShyftClient {
   ): Promise<string> {
     const sig = await requestServerTx("sendMessage", { chatId, messageIndex, content, isPayment, paymentAmount }, this.provider.wallet, this.provider.connection);
 
-    // Wait for confirmation so on-chain state is readable immediately
-    await this.provider.connection.confirmTransaction(sig, "confirmed");
+    // Wait for confirmation via HTTP polling — no WebSocket needed
+    await pollConfirmation(this.provider.connection, sig);
 
     // Invalidate caches
     rpcCache.invalidate("messages:");

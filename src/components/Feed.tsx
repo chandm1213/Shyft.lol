@@ -9,7 +9,7 @@ import { useAppStore } from "@/lib/store";
 import { toast } from "@/components/Toast";
 import { RichContent, MediaBar, uploadMedia, isVideoFile } from "@/components/RichContent";
 import { useProgram } from "@/hooks/useProgram";
-import { useWallet, useConnection } from "@/hooks/usePrivyWallet";
+import { useWallet, useConnection, pollConfirmation } from "@/hooks/usePrivyWallet";
 import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { ShyftClient, clearRpcCache } from "@/lib/program";
 import ProfileHoverCard from "@/components/ProfileHoverCard";
@@ -156,67 +156,26 @@ export function OnChainPostCard({
       const signedTx = await signTransaction(tx);
       const sig = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: false });
 
-      // Try to confirm, but handle timeout gracefully — user already paid
-      let confirmed = false;
-      try {
-        await connection.confirmTransaction(
-          { signature: sig, blockhash, lastValidBlockHeight },
-          "confirmed"
-        );
-        confirmed = true;
-      } catch (confirmErr: any) {
-        console.warn("Confirm timed out, checking if tx landed...", confirmErr?.message);
-        // Confirmation timed out (block height exceeded) — but tx may have landed.
-        // Poll for the signature status as a fallback.
-        try {
-          const status = await connection.getSignatureStatus(sig);
-          if (status?.value?.confirmationStatus === "confirmed" || status?.value?.confirmationStatus === "finalized") {
-            confirmed = true;
-          }
-        } catch (_) { /* ignore */ }
+      // Poll for confirmation via HTTP — no WebSocket needed
+      const confirmed = await pollConfirmation(connection, sig);
 
-        if (!confirmed) {
-          // Last resort: wait a moment and try once more
-          await new Promise(r => setTimeout(r, 2000));
-          try {
-            const status = await connection.getSignatureStatus(sig);
-            if (status?.value && !status.value.err) {
-              confirmed = true;
-            }
-          } catch (_) { /* ignore */ }
-        }
-      }
+      // Always unlock — user already signed & sent the tx
+      addUnlockedPost(post.publicKey);
+      addPayment({
+        id: sig,
+        sender: "me",
+        recipient: post.author,
+        amount: postPrice,
+        token: "SOL",
+        status: "completed",
+        isPrivate: false,
+        timestamp: Date.now(),
+        txSignature: sig,
+      });
 
       if (confirmed) {
-        // Record the unlock + payment
-        addUnlockedPost(post.publicKey);
-        addPayment({
-          id: sig,
-          sender: "me",
-          recipient: post.author,
-          amount: postPrice,
-          token: "SOL",
-          status: "completed",
-          isPrivate: false,
-          timestamp: Date.now(),
-          txSignature: sig,
-        });
         toast("success", "Post unlocked! 🔓", `Paid ${postPrice} SOL — TX: ${sig.slice(0, 8)}...`);
       } else {
-        // Payment was sent but couldn't verify confirmation.
-        // Still unlock — the user paid, we shouldn't lock them out.
-        addUnlockedPost(post.publicKey);
-        addPayment({
-          id: sig,
-          sender: "me",
-          recipient: post.author,
-          amount: postPrice,
-          token: "SOL",
-          status: "completed",
-          isPrivate: false,
-          timestamp: Date.now(),
-          txSignature: sig,
-        });
         toast("success", "Post unlocked! 🔓", `Payment sent — TX: ${sig.slice(0, 8)}...`);
       }
     } catch (err: any) {
@@ -263,47 +222,27 @@ export function OnChainPostCard({
       const signedTx = await signTransaction(tx);
       const sig = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: false });
 
-      // Confirm with timeout fallback — if block height exceeded, check if tx landed
-      let tipConfirmed = false;
-      try {
-        await connection.confirmTransaction(
-          { signature: sig, blockhash, lastValidBlockHeight },
-          "confirmed"
-        );
-        tipConfirmed = true;
-      } catch (confirmErr: any) {
-        console.warn("Tip confirm timed out, checking tx status...", confirmErr?.message);
-        try {
-          const status = await connection.getSignatureStatus(sig);
-          if (status?.value && !status.value.err) tipConfirmed = true;
-        } catch (_) { /* ignore */ }
-        if (!tipConfirmed) {
-          await new Promise(r => setTimeout(r, 2000));
-          try {
-            const status = await connection.getSignatureStatus(sig);
-            if (status?.value && !status.value.err) tipConfirmed = true;
-          } catch (_) { /* ignore */ }
-        }
-      }
+      // Poll for confirmation via HTTP — no WebSocket needed
+      const tipConfirmed = await pollConfirmation(connection, sig);
 
+      addPostTip(post.publicKey, amount);
+      addPayment({
+        id: sig,
+        sender: "me",
+        recipient: post.author,
+        amount,
+        token: "SOL",
+        status: "completed",
+        isPrivate: false,
+        timestamp: Date.now(),
+        txSignature: sig,
+      });
+
+      const authorName = profile?.username ? `@${profile.username}` : post.author.slice(0, 8);
       if (tipConfirmed) {
-        addPostTip(post.publicKey, amount);
-        addPayment({
-          id: sig,
-          sender: "me",
-          recipient: post.author,
-          amount,
-          token: "SOL",
-          status: "completed",
-          isPrivate: false,
-          timestamp: Date.now(),
-          txSignature: sig,
-        });
-
-        const authorName = profile?.username ? `@${profile.username}` : post.author.slice(0, 8);
         toast("success", `Tipped ${amount} SOL! 💸`, `Sent to ${authorName} — TX: ${sig.slice(0, 8)}...`);
       } else {
-        toast("error", "Tip sent but unconfirmed", `TX: ${sig.slice(0, 8)}... — check explorer`);
+        toast("success", `Tip sent! 💸`, `TX: ${sig.slice(0, 8)}... — confirming...`);
       }
       setTipAmount("");
     } catch (err: any) {

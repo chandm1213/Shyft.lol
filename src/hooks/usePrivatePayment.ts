@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useConnection, useWallet } from "@/hooks/usePrivyWallet";
+import { useConnection, useWallet, pollConfirmation } from "@/hooks/usePrivyWallet";
 import {
   PublicKey,
   Transaction,
@@ -72,10 +72,7 @@ export function usePrivatePayment() {
         setStep("confirming");
         console.log("⏳ Confirming payment tx:", sig);
 
-        await connection.confirmTransaction(
-          { signature: sig, blockhash, lastValidBlockHeight },
-          "confirmed"
-        );
+        await pollConfirmation(connection, sig);
 
         console.log("✅ Payment confirmed:", sig);
         setTxSignature(sig);

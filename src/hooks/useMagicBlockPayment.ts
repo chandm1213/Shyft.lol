@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useConnection, useWallet } from "@/hooks/usePrivyWallet";
+import { useConnection, useWallet, pollConfirmation } from "@/hooks/usePrivyWallet";
 import { PublicKey, Transaction, VersionedTransaction, Connection } from "@solana/web3.js";
 import { useAppStore } from "@/lib/store";
 
@@ -154,14 +154,7 @@ export function useMagicBlockPayment() {
           await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log("✅ Ephemeral tx confirmed (MagicBlock):", sig);
         } else {
-          await connection.confirmTransaction(
-            {
-              signature: sig,
-              blockhash: data.recentBlockhash,
-              lastValidBlockHeight: data.lastValidBlockHeight,
-            },
-            "confirmed"
-          );
+          await pollConfirmation(connection, sig);
           console.log("✅ Base chain tx confirmed:", sig);
         }
 

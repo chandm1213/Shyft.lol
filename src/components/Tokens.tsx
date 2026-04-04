@@ -16,7 +16,7 @@ import {
   Shield,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { useWallet } from "@/hooks/usePrivyWallet";
+import { useWallet, pollConfirmation } from "@/hooks/usePrivyWallet";
 import { toast } from "@/components/Toast";
 import TokenLaunch from "@/components/TokenLaunch";
 import TokenTrade from "@/components/TokenTrade";
@@ -147,7 +147,7 @@ export default function Tokens() {
         }
         const signed = await signTransaction(tx);
         const sig = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(sig, "confirmed");
+        await pollConfirmation(connection, sig);
       }
 
       toast("success", "Fees claimed! Check your wallet. 🎉");

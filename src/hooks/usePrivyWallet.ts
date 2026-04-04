@@ -21,13 +21,37 @@ export const HELIUS_MAINNET_RPC = RPC_PROXY;
 /** @deprecated kept for any old references */
 export const HELIUS_DEVNET_RPC = HELIUS_MAINNET_RPC;
 
+/**
+ * Poll-based transaction confirmation — NO WebSocket needed.
+ * confirmTransaction() in @solana/web3.js always opens a WSS connection
+ * which fails on Vercel. This uses pure HTTP getSignatureStatuses instead.
+ */
+export async function pollConfirmation(
+  connection: Connection,
+  signature: string,
+  maxAttempts = 30,
+  intervalMs = 2000,
+): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const resp = await connection.getSignatureStatuses([signature]);
+      const status = resp?.value?.[0];
+      if (status) {
+        if (status.err) return false; // tx failed
+        if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
+          return true;
+        }
+      }
+    } catch (_) { /* RPC hiccup, keep trying */ }
+    if (i < maxAttempts - 1) await new Promise(r => setTimeout(r, intervalMs));
+  }
+  return false;
+}
+
 /** Shared connection (mainnet — for Shadowspace program via Anchor) */
 let _sharedConnection: Connection | null = null;
 export function getSharedConnection(): Connection {
   if (!_sharedConnection) {
-    // Disable WebSocket endpoint — Vercel doesn't support WSS, and the
-    // auto-derived wss://www.shyft.lol/api/rpc fails endlessly.
-    // All subscriptions use HTTP polling instead.
     _sharedConnection = new Connection(HELIUS_MAINNET_RPC, {
       commitment: "confirmed",
       wsEndpoint: undefined,

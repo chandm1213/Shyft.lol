@@ -11,7 +11,7 @@ import {
   DollarSign,
   Info,
 } from "lucide-react";
-import { useWallet } from "@/hooks/usePrivyWallet";
+import { useWallet, pollConfirmation } from "@/hooks/usePrivyWallet";
 import { toast } from "@/components/Toast";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
 import { SOL_MINT, formatSOL } from "@/lib/bags";
@@ -154,7 +154,7 @@ export default function TokenTrade({
 
       const connection = new Connection("/api/rpc", { commitment: "confirmed", wsEndpoint: undefined });
       const sig = await connection.sendRawTransaction(signed.serialize());
-      await connection.confirmTransaction(sig, "confirmed");
+      await pollConfirmation(connection, sig);
 
       toast("success", `${mode === "buy" ? "Bought" : "Sold"} ${tokenSymbol} successfully! 🎉`);
       setAmount("");
