@@ -23,6 +23,31 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:3001",
 ]);
 
+// ── Rate Limiting: 10 uploads per IP per minute ──
+const uploadIpTimestamps = new Map<string, number[]>();
+const UPLOAD_RATE_WINDOW_MS = 60_000;
+const UPLOAD_RATE_MAX = 10;
+
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown"
+  );
+}
+
+function isUploadRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const timestamps = (uploadIpTimestamps.get(ip) || []).filter((t) => now - t < UPLOAD_RATE_WINDOW_MS);
+  if (timestamps.length >= UPLOAD_RATE_MAX) {
+    uploadIpTimestamps.set(ip, timestamps);
+    return true;
+  }
+  timestamps.push(now);
+  uploadIpTimestamps.set(ip, timestamps);
+  return false;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const origin = request.headers.get("origin") || "";
@@ -31,6 +56,12 @@ export async function POST(request: NextRequest) {
       || [...ALLOWED_ORIGINS].some(o => referer.startsWith(o));
     if (!allowed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    // Rate limit uploads
+    const ip = getClientIp(request);
+    if (isUploadRateLimited(ip)) {
+      return NextResponse.json({ error: "Upload rate limited" }, { status: 429 });
     }
 
     const formData = await request.formData();

@@ -456,6 +456,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid walletAddress" }, { status: 400 });
     }
 
+    // ── 2b. BLOCK TREASURY AS USER ──
+    // CRITICAL: If walletAddress == treasury, the tx is fully signed by treasury alone
+    // (treasury signs as fee payer AND user signer). Anyone could submit it.
+    const treasuryPk = getTreasuryKeypair().publicKey;
+    if (userPubkey.equals(treasuryPk)) {
+      console.error(`🚨 BLOCKED: walletAddress is treasury! from IP ${getClientIp(request)}`);
+      return NextResponse.json({ error: "Invalid walletAddress" }, { status: 403 });
+    }
+
     // ── 3. RATE LIMIT ──
     const clientIp = getClientIp(request);
     if (isRateLimited(clientIp, ipTimestamps)) {

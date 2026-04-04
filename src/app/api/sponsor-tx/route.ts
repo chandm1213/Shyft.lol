@@ -120,17 +120,12 @@ function isAllowedOrigin(request: NextRequest): boolean {
   return false;
 }
 
-/** POST — accepts an unsigned tx (base64), treasury signs it, returns the partially-signed tx.
- *  The user signs + submits to Solana themselves.
- *  Because the server builds the treasury signature over the EXACT bytes,
- *  any modification by the client invalidates the signature → Solana rejects. */
+/** POST — DEPRECATED. This route is dead. Use /api/build-tx instead.
+ *  Killed 2026-04-04 after security audit found it still accepts client-built transactions. */
 export async function POST(request: NextRequest) {
-  try {
-    // ── 1. ORIGIN CHECK (strict — no empty fallback) ──
-    if (!isAllowedOrigin(request)) {
-      console.error(`🚨 BLOCKED origin: ${request.headers.get("origin")} | ref: ${request.headers.get("referer")}`);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+  console.error(`🚨 DEAD ROUTE HIT: /api/sponsor-tx POST from ${request.headers.get("origin")}`);
+  return NextResponse.json({ error: "This endpoint is deprecated. Use /api/build-tx" }, { status: 410 });
+  /* DEAD CODE BELOW — kept for reference only
 
     const body = await request.json();
     const { transaction, walletAddress } = body;
@@ -243,4 +238,5 @@ export async function POST(request: NextRequest) {
     console.error("Sponsor tx error:", err);
     return NextResponse.json({ error: err?.message || "Internal error" }, { status: 500 });
   }
+  END OF DEAD CODE */
 }
