@@ -60,13 +60,17 @@ async function fetchStats(): Promise<Record<string, number>> {
     }
   }
 
-  // Also get total transaction count for the program
-  try {
-    const signatures = await connection.getSignaturesForAddress(PROGRAM_ID, { limit: 1000 });
-    stats.Transactions = signatures.length;
-  } catch {
-    stats.Transactions = cache?.data.Transactions || 0;
-  }
+  // Transactions = sum of all on-chain account actions
+  // (profiles + posts + follows + reactions + comments + messages)
+  // More reliable than getSignaturesForAddress which caps at 1000 and often fails
+  stats.Transactions =
+    (stats.Profile || 0) +
+    (stats.Post || 0) +
+    (stats.Follow || 0) +
+    (stats.Reaction || 0) +
+    (stats.Comment || 0) +
+    (stats.Chat || 0) +
+    (stats.Message || 0);
 
   cache = { data: stats, fetchedAt: Date.now() };
   return stats;
