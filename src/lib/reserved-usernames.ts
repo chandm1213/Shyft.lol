@@ -62,6 +62,7 @@ const INVITE_CODES: InviteEntry[] = [
   { username: "catmcgee", code: "CAT-SHYFT-2026" },
   { username: "stuubags", code: "STUU-SHYFT-2026" },
   { username: "solanasensei", code: "SENSEI-SHYFT-2026" },
+  { username: "finnbags", code: "FINN-SHYFT-2026" },
   // Add more: { username: "solana", code: "SOL-SHYFT-9X2K" },
 ];
 
