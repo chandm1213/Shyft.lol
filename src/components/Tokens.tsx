@@ -16,12 +16,12 @@ import {
   Shield,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { useWallet, pollConfirmation } from "@/hooks/usePrivyWallet";
+import { useWallet, pollConfirmation, getSharedConnection } from "@/hooks/usePrivyWallet";
 import { toast } from "@/components/Toast";
 import TokenLaunch from "@/components/TokenLaunch";
 import TokenTrade from "@/components/TokenTrade";
 import { formatSOL, BAGS_REF_CODE } from "@/lib/bags";
-import { Connection, VersionedTransaction, Transaction } from "@solana/web3.js";
+import { VersionedTransaction, Transaction } from "@solana/web3.js";
 
 interface TokenItem {
   name: string;
@@ -132,7 +132,7 @@ export default function Tokens() {
       const txList: { unsignedTxBase64: string }[] = data.response;
       if (!txList || txList.length === 0) throw new Error("No claim transactions returned");
 
-      const connection = new Connection("/api/rpc", { commitment: "confirmed", wsEndpoint: undefined });
+      const connection = getSharedConnection();
 
       toast("info", `Signing ${txList.length} claim transaction(s)...`);
 

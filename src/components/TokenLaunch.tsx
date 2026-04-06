@@ -14,10 +14,10 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { useWallet, pollConfirmation } from "@/hooks/usePrivyWallet";
+import { useWallet, pollConfirmation, getSharedConnection } from "@/hooks/usePrivyWallet";
 import { toast } from "@/components/Toast";
 import { uploadImage } from "@/components/RichContent";
-import { Connection, VersionedTransaction } from "@solana/web3.js";
+import { VersionedTransaction } from "@solana/web3.js";
 import { BAGS_REF_CODE } from "@/lib/bags";
 
 interface TokenLaunchProps {
@@ -110,7 +110,7 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
       // Step 2: Create fee share config + launch tx, then batch sign
       setStep("launching");
 
-      const connection = new Connection("/api/rpc", { commitment: "confirmed", wsEndpoint: undefined });
+      const connection = getSharedConnection();
 
       // Create fee share config (returns unsigned txs)
       const configRes = await fetch("/api/bags", {
