@@ -87,6 +87,16 @@ export function useNotifications() {
         return addr.slice(0, 4) + "..." + addr.slice(-4);
       };
 
+      const resolveAvatar = (addr: string): string | undefined => {
+        return profileMap[addr]?.avatarUrl || undefined;
+      };
+
+      // Build username → wallet address lookup for mention detection
+      const usernameToWallet: Record<string, string> = {};
+      for (const [addr, p] of Object.entries(profileMap)) {
+        if ((p as any)?.username) usernameToWallet[(p as any).username.toLowerCase()] = addr;
+      }
+
       // My posts (to check for comments, likes, reactions on them)
       const myPosts = posts.filter((p: any) => p.author === myAddr);
       const myPostKeys = new Set(myPosts.map((p: any) => p.publicKey));
@@ -106,6 +116,7 @@ export function useNotifications() {
           type: "comment",
           actorAddress: c.author,
           actorName: resolveActor(c.author),
+          actorAvatarUrl: resolveAvatar(c.author),
           postKey: c.post,
           postPreview: post?.content?.slice(0, 50) || "",
           commentText: c.content?.slice(0, 80) || "",
@@ -128,6 +139,7 @@ export function useNotifications() {
           type: "reaction",
           actorAddress: r.user,
           actorName: resolveActor(r.user),
+          actorAvatarUrl: resolveAvatar(r.user),
           postKey: r.post,
           postPreview: post?.content?.slice(0, 50) || "",
           reactionEmoji: REACTIONS_EMOJI[r.reactionType] || "👍",
@@ -190,6 +202,7 @@ export function useNotifications() {
           type: "follow",
           actorAddress: followerAddr,
           actorName: resolveActor(followerAddr),
+          actorAvatarUrl: resolveAvatar(followerAddr),
           timestamp: Date.now(),
           read: false,
         });
@@ -222,12 +235,65 @@ export function useNotifications() {
               type: "repost",
               actorAddress: p.author,
               actorName: resolveActor(p.author),
+              actorAvatarUrl: resolveAvatar(p.author),
               postKey: p.publicKey,
               postPreview: content.slice(0, 50) || "",
               timestamp: Number(p.createdAt) * 1000 || Date.now(),
               read: false,
             });
           }
+        }
+      }
+
+      // ─── @mentions in posts and comments ───
+      if (myUsername) {
+        const mentionRegex = new RegExp(`@${myUsername}\\b`, "i");
+
+        // Check posts for @mentions
+        for (const p of posts) {
+          if (p.author === myAddr) continue;
+          const content = p.content || "";
+          if (!mentionRegex.test(content)) continue;
+          // Skip reposts (already handled above)
+          if (content.toLowerCase().startsWith(`rt|@${myUsername}|`)) continue;
+          const key = `mention:post:${p.publicKey}`;
+          if (seen.has(key)) continue;
+          newSeenKeys.push(key);
+          if (isFirstPoll) continue;
+          newNotifications.push({
+            id: uuidv4(),
+            type: "mention",
+            actorAddress: p.author,
+            actorName: resolveActor(p.author),
+            actorAvatarUrl: resolveAvatar(p.author),
+            postKey: p.publicKey,
+            postPreview: content.slice(0, 50) || "",
+            timestamp: Number(p.createdAt) * 1000 || Date.now(),
+            read: false,
+          });
+        }
+
+        // Check comments for @mentions
+        for (const c of comments) {
+          if (c.author === myAddr) continue;
+          const content = c.content || "";
+          if (!mentionRegex.test(content)) continue;
+          const key = `mention:comment:${c.publicKey}`;
+          if (seen.has(key)) continue;
+          newSeenKeys.push(key);
+          if (isFirstPoll) continue;
+          newNotifications.push({
+            id: uuidv4(),
+            type: "mention",
+            actorAddress: c.author,
+            actorName: resolveActor(c.author),
+            actorAvatarUrl: resolveAvatar(c.author),
+            postKey: c.post,
+            postPreview: content.slice(0, 50) || "",
+            commentText: content.slice(0, 80) || "",
+            timestamp: Number(c.createdAt) * 1000 || Date.now(),
+            read: false,
+          });
         }
       }
 

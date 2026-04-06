@@ -2,6 +2,7 @@
 
 import { useState, useEffect, type ReactNode } from "react";
 import { ExternalLink, Play, X } from "lucide-react";
+import { useAppStore } from "@/lib/store";
 
 /* ═══════════════════════════════════════════════════════════════
    RichContent — renders text with embedded links, images, videos
@@ -11,6 +12,9 @@ import { ExternalLink, Play, X } from "lucide-react";
 
 /* ── URL regex ── */
 const URL_REGEX = /https?:\/\/[^\s<]+[^\s<.,;:!?"')\]]/gi;
+
+/* ── @mention regex ── */
+const MENTION_REGEX = /@([a-zA-Z0-9_]{1,30})/g;
 
 /* ── Image extensions ── */
 const IMAGE_EXTS = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i;
@@ -45,20 +49,51 @@ export function RichContent({ content, className = "" }: RichContentProps) {
     (u) => !IMAGE_EXTS.test(u) && !VIDEO_EXTS.test(u) && !YOUTUBE_REGEX.test(u) && !IPFS_IMAGE_URL.test(u)
   );
 
-  /* ── Render text with inline links ── */
+  /* ── Render text with inline links and @mentions ── */
+  const { navigateToProfile } = useAppStore();
   const renderText = () => {
     const parts: (string | ReactNode)[] = [];
     let lastIndex = 0;
-    const matches = [...content.matchAll(new RegExp(URL_REGEX.source, "gi"))];
+
+    // Combined regex for URLs and @mentions
+    const COMBINED_REGEX = new RegExp(`(${URL_REGEX.source})|(@[a-zA-Z0-9_]{1,30})`, "gi");
+    const matches = [...content.matchAll(COMBINED_REGEX)];
 
     for (const match of matches) {
-      const url = match[0];
+      const fullMatch = match[0];
       const idx = match.index!;
 
-      // Text before the URL
+      // Text before the match
       if (idx > lastIndex) {
         parts.push(content.slice(lastIndex, idx));
       }
+
+      // @mention
+      if (fullMatch.startsWith("@")) {
+        const username = fullMatch.slice(1);
+        parts.push(
+          <button
+            key={`mention-${idx}`}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Search profileMap isn't available here — use a global event to resolve
+              // We'll emit a custom event that Feed listens for, or use the store
+              // For now, navigate to feed search — but actually we can resolve via store
+              // The mention click triggers a profile search by username
+              (window as any).__shyftMentionClick?.(username);
+            }}
+            className="text-[#2563EB] font-semibold hover:underline cursor-pointer"
+          >
+            @{username}
+          </button>
+        );
+        lastIndex = idx + fullMatch.length;
+        continue;
+      }
+
+      // URL handling (same as before)
+      const url = fullMatch;
 
       // If it's an image/video URL, don't show it inline as text (we'll show the media below)
       if (IMAGE_EXTS.test(url) || IPFS_IMAGE_URL.test(url) || VIDEO_EXTS.test(url) || IPFS_VIDEO_URL.test(url)) {

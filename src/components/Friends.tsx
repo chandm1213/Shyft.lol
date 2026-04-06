@@ -16,7 +16,7 @@ interface SearchResult {
 }
 
 export default function Friends() {
-  const { isConnected } = useAppStore();
+  const { isConnected, navigateToProfile } = useAppStore();
   const program = useProgram();
   const { publicKey } = useWallet();
 
@@ -217,12 +217,18 @@ export default function Friends() {
                   const status = getFollowStatus(result.owner);
                   return (
                     <div key={result.owner} className="flex items-center gap-3 p-3 rounded-xl bg-[#F8FAFC] hover:bg-[#F1F5F9] transition-colors">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-lg border-2 border-white shadow-sm flex-shrink-0">
-                        👤
-                      </div>
+                      <button type="button" onClick={() => navigateToProfile(result.owner)} className="flex-shrink-0 cursor-pointer">
+                      {profileMap[result.owner]?.avatarUrl ? (
+                        <img src={profileMap[result.owner].avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-sm font-semibold text-[#2563EB] border-2 border-white shadow-sm flex-shrink-0">
+                          {(result.displayName || result.username || "?").charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      </button>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-[#1A1A2E] text-sm truncate">{result.displayName || result.username}</span>
+                          <button type="button" onClick={() => navigateToProfile(result.owner)} className="font-semibold text-[#1A1A2E] text-sm truncate hover:text-[#2563EB] transition-colors cursor-pointer">{result.displayName || result.username}</button>
                           {status === "mutual" && (
                             <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#F0FDF4] text-[#16A34A] font-medium">Mutual</span>
                           )}
@@ -315,12 +321,18 @@ export default function Friends() {
               return (
                 <div key={addr} className="bg-white rounded-2xl border border-[#E2E8F0] p-4 animate-fade-in">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-lg border-2 border-white shadow-sm flex-shrink-0">
-                      👤
-                    </div>
+                    <button type="button" onClick={() => navigateToProfile(addr)} className="flex-shrink-0 cursor-pointer">
+                    {profile?.avatarUrl ? (
+                      <img src={profile.avatarUrl} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-sm font-semibold text-[#2563EB] border-2 border-white shadow-sm flex-shrink-0">
+                        {name.charAt(0)?.toUpperCase() || "?"}
+                      </div>
+                    )}
+                    </button>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-[#1A1A2E] text-sm truncate">{name}</span>
+                        <button type="button" onClick={() => navigateToProfile(addr)} className="font-semibold text-[#1A1A2E] text-sm truncate hover:text-[#2563EB] transition-colors cursor-pointer">{name}</button>
                         <span className="text-xs text-[#94A3B8]">@{username}</span>
                         {theyFollowBack && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#F0FDF4] text-[#16A34A] font-medium">Mutual</span>
@@ -382,12 +394,18 @@ export default function Friends() {
               return (
                 <div key={addr} className="bg-white rounded-2xl border border-[#E2E8F0] p-4 animate-fade-in">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7] flex items-center justify-center text-lg border-2 border-white shadow-sm flex-shrink-0">
-                      👤
-                    </div>
+                    <button type="button" onClick={() => navigateToProfile(addr)} className="flex-shrink-0 cursor-pointer">
+                    {profile?.avatarUrl ? (
+                      <img src={profile.avatarUrl} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7] flex items-center justify-center text-sm font-semibold text-[#16A34A] border-2 border-white shadow-sm flex-shrink-0">
+                        {name.charAt(0)?.toUpperCase() || "?"}
+                      </div>
+                    )}
+                    </button>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-[#1A1A2E] text-sm truncate">{name}</span>
+                        <button type="button" onClick={() => navigateToProfile(addr)} className="font-semibold text-[#1A1A2E] text-sm truncate hover:text-[#2563EB] transition-colors cursor-pointer">{name}</button>
                         <span className="text-xs text-[#94A3B8]">@{username}</span>
                         {iFollowThem && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#F0FDF4] text-[#16A34A] font-medium">Mutual</span>

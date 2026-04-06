@@ -27,7 +27,7 @@ const subtitles: Record<string, string> = {
 };
 
 export default function Header() {
-  const { activeTab, setCurrentUser, setConnected, notifications, markAllNotificationsRead, setActiveTab, theme, toggleTheme } = useAppStore();
+  const { activeTab, setCurrentUser, setConnected, notifications, markAllNotificationsRead, setActiveTab, theme, toggleTheme, navigateToProfile, setFocusPostKey } = useAppStore();
   const { publicKey, connected, login, logout, ready } = useWallet();
   const program = useProgram();
   const [showSetup, setShowSetup] = useState(false);
@@ -125,6 +125,8 @@ export default function Header() {
       case "reaction": return "😀";
       case "repost": return "🔁";
       case "follow": return "👤";
+      case "mention": return "🏷️";
+      case "tip": return "🔔";
       default: return "🔔";
     }
   };
@@ -136,6 +138,7 @@ export default function Header() {
       case "reaction": return <><strong>{n.actorName}</strong> reacted {n.reactionEmoji} to your post</>;
       case "repost": return <><strong>{n.actorName}</strong> reposted your post</>;
       case "follow": return <><strong>{n.actorName}</strong> started following you</>;
+      case "mention": return <><strong>{n.actorName}</strong> mentioned you{n.commentText ? `: "${n.commentText}"` : ""}</>;
       case "tip": return <><strong>💸 {n.postPreview}</strong> — someone tipped you!</>;
       default: return <><strong>{n.actorName}</strong> interacted with your content</>;
     }
@@ -222,30 +225,58 @@ export default function Header() {
                         </div>
                       ) : (
                         notifications.slice(0, 30).map((n) => (
-                          <button
+                          <div
                             key={n.id}
-                            onClick={() => {
-                              if (n.postKey) setActiveTab("feed");
-                              setShowNotifications(false);
-                            }}
                             className={`w-full flex items-start gap-3 px-4 py-3 hover:bg-[#F8FAFC] transition-colors text-left border-b border-[#F1F5F9] last:border-0 ${!n.read ? "bg-[#EFF6FF]" : ""}`}
                           >
-                            <span className="text-lg flex-shrink-0 mt-0.5">{n.reactionEmoji || notifIcon(n.type)}</span>
-                            <div className="flex-1 min-w-0">
+                            {/* Actor avatar — clickable to profile */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (n.actorAddress && n.actorAddress !== "unknown" && n.actorAddress !== "") {
+                                  navigateToProfile(n.actorAddress);
+                                  setShowNotifications(false);
+                                }
+                              }}
+                              className="flex-shrink-0 mt-0.5 cursor-pointer"
+                            >
+                              {n.actorAvatarUrl ? (
+                                <img src={n.actorAvatarUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-[#E2E8F0]" />
+                              ) : (
+                                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#EBF4FF] to-[#E0F2FE] flex items-center justify-center text-sm border border-[#E2E8F0]">
+                                  {n.type === "tip" ? "💸" : (n.actorName?.charAt(0)?.toUpperCase() || notifIcon(n.type))}
+                                </div>
+                              )}
+                            </button>
+                            {/* Notification content — click navigates to post */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (n.type === "follow" && n.actorAddress) {
+                                  navigateToProfile(n.actorAddress);
+                                } else if (n.postKey) {
+                                  setFocusPostKey(n.postKey);
+                                  setActiveTab("feed");
+                                }
+                                setShowNotifications(false);
+                              }}
+                              className="flex-1 min-w-0 text-left cursor-pointer"
+                            >
                               <p className="text-[13px] text-[#334155] leading-snug">
                                 {notifMessage(n)}
                               </p>
-                              {n.postPreview && n.type !== "follow" && (
+                              {n.postPreview && n.type !== "follow" && n.type !== "mention" && (
                                 <p className="text-[11px] text-[#94A3B8] mt-0.5 truncate">
                                   {n.postPreview.startsWith("RT|") ? "Repost" : n.postPreview}
                                 </p>
                               )}
                               <p className="text-[10px] text-[#CBD5E1] mt-0.5">{timeAgo(n.timestamp)}</p>
-                            </div>
+                            </button>
                             {!n.read && (
                               <span className="w-2 h-2 rounded-full bg-[#2563EB] flex-shrink-0 mt-2" />
                             )}
-                          </button>
+                          </div>
                         ))
                       )}
                     </div>

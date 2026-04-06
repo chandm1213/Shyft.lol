@@ -6,10 +6,11 @@ import type { Post, ChatConversation, ChatMessage, Payment, UserProfile } from "
 /* ───────── Notification Types ───────── */
 export interface AppNotification {
   id: string;
-  type: "like" | "comment" | "repost" | "follow" | "reaction" | "tip";
+  type: "like" | "comment" | "repost" | "follow" | "reaction" | "tip" | "mention";
   /** Who triggered it */
   actorAddress: string;
   actorName: string;
+  actorAvatarUrl?: string;
   /** The post involved (if any) */
   postKey?: string;
   postPreview?: string;
@@ -66,6 +67,10 @@ interface AppState {
   setViewingProfile: (addr: string | null) => void;
   /** Navigate to a user's profile: sets viewingProfile and switches to profile tab */
   navigateToProfile: (walletAddress: string) => void;
+
+  // Focus a specific post (from notification click)
+  focusPostKey: string | null;
+  setFocusPostKey: (key: string | null) => void;
 
   // Active tab
   activeTab: string;
@@ -254,6 +259,10 @@ export const useAppStore = create<AppState>()(
   viewingProfile: null,
   setViewingProfile: (addr) => set({ viewingProfile: addr }),
   navigateToProfile: (walletAddress) => set({ viewingProfile: walletAddress, activeTab: "profile" }),
+
+  // Focus post (from notification click)
+  focusPostKey: null,
+  setFocusPostKey: (key) => set({ focusPostKey: key }),
 
   // Navigation
   activeTab: "feed",

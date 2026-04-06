@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2, Coins, TrendingUp } from "lucide-react";
 
 // Gold badge for OG / founder accounts
@@ -81,6 +81,7 @@ export function OnChainPostCard({
   onReactionAdded,
   onRepost,
   onDelete,
+  defaultShowComments = false,
 }: {
   post: any;
   profile: any;
@@ -93,11 +94,12 @@ export function OnChainPostCard({
   onReactionAdded: () => void;
   onRepost: (content: string) => void;
   onDelete: () => void;
+  defaultShowComments?: boolean;
 }) {
   const { likedPosts, addLikedPost, isConnected, currentUser, navigateToProfile, unlockedPosts, addUnlockedPost, addPayment, postTips, addPostTip } = useAppStore();
   const { publicKey: walletKey, signTransaction } = useWallet();
   const { connection } = useConnection();
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(defaultShowComments);
   const [showReactions, setShowReactions] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [liking, setLiking] = useState(false);
@@ -898,7 +900,7 @@ export function OnChainPostCard({
                       </button>
                     )}
                   </div>
-                  <p className="text-xs text-[#475569] mt-0.5">{comment.content}</p>
+                  <div className="text-xs text-[#475569] mt-0.5"><RichContent content={comment.content} className="[&_p]:text-xs [&_p]:leading-normal" /></div>
                 </div>
               </div>
             );
@@ -938,7 +940,7 @@ export function OnChainPostCard({
 }
 
 export default function Feed() {
-  const { isConnected, currentUser } = useAppStore();
+  const { isConnected, currentUser, focusPostKey, setFocusPostKey, navigateToProfile } = useAppStore();
   const [newPost, setNewPost] = useState("");
   const program = useProgram();
   const { publicKey } = useWallet();
@@ -955,6 +957,35 @@ export default function Feed() {
   const [uploading, setUploading] = useState(false);
   const [isPaidPost, setIsPaidPost] = useState(false);
   const [paidPrice, setPaidPrice] = useState("0.01");
+
+  // @mention click handler — resolves username → wallet and navigates to profile
+  useEffect(() => {
+    (window as any).__shyftMentionClick = (username: string) => {
+      const lower = username.toLowerCase();
+      const entry = Object.entries(profileMap).find(([, p]) => p?.username?.toLowerCase() === lower);
+      if (entry) {
+        navigateToProfile(entry[0]);
+      } else {
+        toast("error", `User @${username} not found`);
+      }
+    };
+    return () => { delete (window as any).__shyftMentionClick; };
+  }, [profileMap, navigateToProfile]);
+
+  // Focus post from notification click — scroll to post and open comments
+  useEffect(() => {
+    if (!focusPostKey || onchainPosts.length === 0) return;
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`post-${focusPostKey}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-[#2563EB]", "ring-offset-2");
+        setTimeout(() => el.classList.remove("ring-2", "ring-[#2563EB]", "ring-offset-2"), 3000);
+      }
+      setFocusPostKey(null);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [focusPostKey, onchainPosts, setFocusPostKey]);
 
   // Fetch all public posts from Solana
   const fetchOnchainPosts = async () => {
@@ -1256,8 +1287,8 @@ export default function Feed() {
             const profile = profileMap[post.author];
             const isMe = publicKey ? post.author === publicKey.toBase58() : false;
             return (
+              <div key={post.publicKey} id={`post-${post.publicKey}`} className="transition-all duration-300 rounded-2xl">
               <OnChainPostCard
-                key={post.publicKey}
                 post={post}
                 profile={profile}
                 isMe={isMe}
@@ -1267,6 +1298,7 @@ export default function Feed() {
                 profileMap={profileMap}
                 onCommentAdded={refreshInteractions}
                 onReactionAdded={refreshInteractions}
+                defaultShowComments={focusPostKey === post.publicKey}
                 onRepost={async (content: string) => {
                   if (!program || !publicKey) return;
                   const postId = Date.now();
@@ -1282,6 +1314,7 @@ export default function Feed() {
                   setTimeout(() => fetchOnchainPosts(), 1500);
                 }}
               />
+              </div>
             );
           })}
         </div>
