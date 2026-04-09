@@ -171,14 +171,13 @@ export default async function PostPage({ params }: Props) {
   // Extract images from content
   const imgMatches = expanded.match(/https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp)/gi) || [];
 
-  const blinkUrl = author && postId
-    ? `https://dial.to/?action=solana-action%3Ahttps%3A%2F%2Fwww.shyft.lol%2Fapi%2Factions%2Fpost%3Fauthor%3D${author}%26postId%3D${postId}`
+  const actionApiUrl = author && postId
+    ? `solana-action:https://www.shyft.lol/api/actions/post?author=${author}&postId=${postId}`
     : null;
 
   return (
     <html>
       <head>
-        <meta httpEquiv="refresh" content={`3;url=https://www.shyft.lol`} />
         <style>{`
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { 
@@ -337,16 +336,16 @@ export default async function PostPage({ params }: Props) {
             <a href="https://www.shyft.lol" className="btn btn-primary">
               Open on Shyft →
             </a>
-            {blinkUrl && (
-              <a href={blinkUrl} className="btn btn-secondary">
-                ⚡ Like & Tip via Blink
+            {actionApiUrl && (
+              <a href={actionApiUrl} className="btn btn-secondary">
+                💸 Tip Creator
               </a>
             )}
           </div>
 
-          {blinkUrl && (
+          {actionApiUrl && (
             <div className="blink-label">
-              Interact with this post directly from your Solana wallet
+              Tip this creator directly with any Solana wallet
             </div>
           )}
 
