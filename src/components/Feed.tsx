@@ -736,7 +736,7 @@ export function OnChainPostCard({
           onClick={async (e) => {
             e.stopPropagation();
             const authorName = profile?.username ? `@${profile.username}` : post.author.slice(0, 8);
-            const blinkUrl = `https://dial.to/?action=solana-action%3Ahttps%3A%2F%2Fwww.shyft.lol%2Fapi%2Factions%2Fpost%3Fauthor%3D${post.author}%26postId%3D${post.postId}`;
+            const postUrl = `https://www.shyft.lol/post/${post.author}-${post.postId}`;
             // Clean share text: strip IPFS hashes, URLs, and protocol prefixes for tweet-friendly text
             let rawText = post.content || "";
             // Strip PAID|, COMM|, RT| prefixes
@@ -751,16 +751,16 @@ export function OnChainPostCard({
               .trim()
               .slice(0, 100);
             const caption = cleanText
-              ? `"${cleanText}" — ${authorName} on @Shyft_lol\n\n`
-              : `Check out ${authorName}'s post on @Shyft_lol\n\n`;
-            const shareText = `${caption}${blinkUrl}`;
+              ? `"${cleanText}" — ${authorName} on @Shyft_lol ⚡\n\n`
+              : `Check out ${authorName}'s post on @Shyft_lol ⚡\n\n`;
+            const shareText = `${caption}${postUrl}`;
             if (navigator.share) {
               try {
-                await navigator.share({ title: `${authorName} on Shyft`, text: caption.trim(), url: blinkUrl });
+                await navigator.share({ title: `${authorName} on Shyft`, text: caption.trim(), url: postUrl });
               } catch {}
             } else {
               await navigator.clipboard.writeText(shareText);
-              toast("success", "Blink link copied! ⚡", "Paste on X — anyone with Phantom can interact");
+              toast("success", "Post link copied! ⚡", "Phantom users will see interactive Blink buttons");
             }
           }}
           className="touch-active flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#2563EB] hover:bg-[#EBF4FF] active:bg-[#EBF4FF] transition-all"
