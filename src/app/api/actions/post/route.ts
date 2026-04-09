@@ -195,15 +195,10 @@ export async function GET(request: NextRequest) {
       type: "action" as const,
       icon: postImage || avatarUrl,
       title: `@${username} on Shyft`,
-      description: cleanText || `Post by @${username}`,
-      label: "View Post",
+      description: `${cleanText || `Post by @${username}`}  ·  ❤️ ${likes} likes  ·  💬 ${comments} comments`,
+      label: "Tip",
       links: {
         actions: [
-          {
-            type: "transaction" as const,
-            label: `❤️ Like (${likes})`,
-            href: `${baseUrl}?author=${author}&postId=${postId}&action=like`,
-          },
           {
             type: "transaction" as const,
             label: "💸 Tip 0.01 SOL",
@@ -218,6 +213,22 @@ export async function GET(request: NextRequest) {
             type: "transaction" as const,
             label: "💸 Tip 0.1 SOL",
             href: `${baseUrl}?author=${author}&postId=${postId}&action=tip&amount=0.1`,
+          },
+          {
+            type: "transaction" as const,
+            label: "💸 Custom Tip",
+            href: `${baseUrl}?author=${author}&postId=${postId}&action=tip&amount={amount}`,
+            parameters: [
+              {
+                name: "amount",
+                label: "SOL amount",
+                type: "number" as const,
+                required: true,
+                min: 0.001,
+                max: 10,
+                patternDescription: "Enter an amount between 0.001 and 10 SOL",
+              },
+            ],
           },
         ],
       },
