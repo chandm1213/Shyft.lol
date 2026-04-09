@@ -736,16 +736,27 @@ export function OnChainPostCard({
           onClick={async (e) => {
             e.stopPropagation();
             const authorName = profile?.username ? `@${profile.username}` : post.author.slice(0, 8);
-            const postKey = `${post.author}-${post.postId}`;
-            const shareUrl = `https://www.shyft.lol/post/${postKey}`;
             const blinkUrl = `https://dial.to/?action=solana-action%3Ahttps%3A%2F%2Fwww.shyft.lol%2Fapi%2Factions%2Fpost%3Fauthor%3D${post.author}%26postId%3D${post.postId}`;
-            const shareContent = isPaid
-              ? `🔒 Paid post by ${authorName} on Shyft — unlock to view`
-              : (post.content.length > 80 ? post.content.slice(0, 80) + "..." : post.content);
-            const shareText = `"${shareContent}" — ${authorName} on Shyft\n\n⚡ Like & Tip via Blink: ${blinkUrl}\n🔗 View: ${shareUrl}`;
+            // Clean share text: strip IPFS hashes, URLs, and protocol prefixes for tweet-friendly text
+            let rawText = post.content || "";
+            // Strip PAID|, COMM|, RT| prefixes
+            if (rawText.startsWith("PAID|")) rawText = "🔒 Paid post";
+            else if (rawText.startsWith("COMM|")) rawText = rawText.split("|").slice(2).join("|");
+            else if (rawText.startsWith("RT|")) rawText = rawText.split("|").slice(2).join("|");
+            // Remove URLs, IPFS CIDs, and extra whitespace
+            const cleanText = rawText
+              .replace(/https?:\/\/[^\s]+/g, "")
+              .replace(/\b(Qm[1-9A-HJ-NP-Za-km-z]{44}|bafy[a-zA-Z0-9]{50,})\b/g, "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 100);
+            const caption = cleanText
+              ? `"${cleanText}" — ${authorName} on @Shyft_lol\n\n`
+              : `Check out ${authorName}'s post on @Shyft_lol\n\n`;
+            const shareText = `${caption}${blinkUrl}`;
             if (navigator.share) {
               try {
-                await navigator.share({ title: `${authorName} on Shyft`, text: `"${shareContent}"`, url: blinkUrl });
+                await navigator.share({ title: `${authorName} on Shyft`, text: caption.trim(), url: blinkUrl });
               } catch {}
             } else {
               await navigator.clipboard.writeText(shareText);
