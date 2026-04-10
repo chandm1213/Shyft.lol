@@ -79,7 +79,7 @@ export function useMagicBlockPayment() {
         // Amount in USDC smallest unit (6 decimals)
         const usdcAmount = Math.round(amount * 1_000_000);
 
-        const transferPayload = {
+        const basePay = {
           from: publicKey.toBase58(),
           to: recipientPubkey.toBase58(),
           mint: USDC_MINT_MAINNET,
@@ -87,22 +87,38 @@ export function useMagicBlockPayment() {
           visibility,
           fromBalance: "base",
           toBalance: "base",
-          initIfMissing: true,
-          initAtasIfMissing: true,
-          initVaultIfMissing: true,
           cluster: "mainnet",
         };
 
-        const apiRes = await fetch(`${MAGICBLOCK_API}/v1/spl/transfer`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(transferPayload),
-        });
+        // Strategy: try with only ATA init (keeps tx small), then escalate if needed
+        const attempts = [
+          { ...basePay, initIfMissing: false, initAtasIfMissing: true, initVaultIfMissing: false },
+          { ...basePay, initIfMissing: true, initAtasIfMissing: true, initVaultIfMissing: true },
+        ];
 
-        if (!apiRes.ok) {
-          const errBody = await apiRes.text();
-          console.error("MagicBlock API error:", apiRes.status, errBody);
-          throw new Error(`MagicBlock API error (${apiRes.status}): ${errBody}`);
+        let apiRes: Response | null = null;
+        let lastErr = "";
+
+        for (const payload of attempts) {
+          apiRes = await fetch(`${MAGICBLOCK_API}/v1/spl/transfer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (apiRes.ok) break;
+
+          lastErr = await apiRes.text();
+          console.warn(`MagicBlock attempt failed (init=${payload.initIfMissing},ata=${payload.initAtasIfMissing},vault=${payload.initVaultIfMissing}):`, apiRes.status, lastErr);
+
+          // If the error is TRANSACTION_TOO_LARGE on the full-init attempt, we can't fix it
+          if (payload.initIfMissing && lastErr.includes("TRANSACTION_TOO_LARGE")) {
+            throw new Error("Transaction too large — recipient may need to initialize their USDC account separately. Try a smaller amount or contact support.");
+          }
+        }
+
+        if (!apiRes || !apiRes.ok) {
+          throw new Error(`MagicBlock API error: ${lastErr}`);
         }
 
         const data: MagicBlockTransferResponse = await apiRes.json();

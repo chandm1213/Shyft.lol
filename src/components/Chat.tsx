@@ -15,7 +15,6 @@ import {
   AlertCircle,
   DollarSign,
   X,
-  Eye,
   EyeOff,
   Check,
   Loader2,
@@ -26,7 +25,6 @@ import { useWallet } from "@/hooks/usePrivyWallet";
 import { PublicKey } from "@solana/web3.js";
 import { deriveEncryptionKeypair } from "@/lib/encryption";
 import { deriveChatId } from "@/lib/program";
-import { usePrivatePayment, type PaymentStep } from "@/hooks/usePrivatePayment";
 import { useMagicBlockPayment, type MagicBlockPaymentStep } from "@/hooks/useMagicBlockPayment";
 import nacl from "tweetnacl";
 
@@ -102,12 +100,10 @@ export default function Chat() {
   // Payment state
   const [showPayment, setShowPayment] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentMode, setPaymentMode] = useState<"private" | "public">("private");
   const [paymentSending, setPaymentSending] = useState(false);
 
-  // Payment hooks
+  // MagicBlock private payment hook
   const { sendPrivatePayment, step: mbStep, error: mbError, txSignature: mbTxSignature, reset: resetMb } = useMagicBlockPayment();
-  const { sendPayment: sendSolPayment, step: solStep, error: solError, txSignature: solTxSignature, reset: resetSol } = usePrivatePayment();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -428,7 +424,7 @@ export default function Chat() {
     setSending(false);
   };
 
-  // Send payment in chat (MagicBlock private USDC or public SOL)
+  // Send private USDC payment in chat via MagicBlock
   const handleSendPayment = async () => {
     if (!activeChat || !program || !publicKey || !encryptionKeys) return;
     const amount = parseFloat(paymentAmount);
@@ -439,28 +435,20 @@ export default function Chat() {
 
     setPaymentSending(true);
     try {
-      let txSig: string | null = null;
       const recipientAddress = activeChat.friend.address;
-      const currency = paymentMode === "private" ? "USDC" : "SOL";
 
-      if (paymentMode === "private") {
-        // MagicBlock private USDC transfer
-        const result = await sendPrivatePayment(recipientAddress, amount, "private");
-        txSig = result?.transferSig || null;
-      } else {
-        // Public SOL transfer
-        const result = await sendSolPayment(recipientAddress, amount);
-        txSig = result?.transferSig || null;
-      }
+      // MagicBlock private USDC transfer
+      const result = await sendPrivatePayment(recipientAddress, amount, "private");
+      const txSig = result?.transferSig || null;
 
       if (!txSig) {
-        toast("error", "Payment failed", mbError || solError || "Transaction was not completed");
+        toast("error", "Payment failed", mbError || "Transaction was not completed");
         setPaymentSending(false);
         return;
       }
 
       // Send a payment message in the chat so both users see it
-      const paymentContent = `💸 Sent ${amount} ${currency} ${paymentMode === "private" ? "privately" : ""} • tx: ${txSig.slice(0, 8)}...`;
+      const paymentContent = `💸 Sent ${amount} USDC privately • tx: ${txSig.slice(0, 8)}...`;
 
       // Ensure chat exists
       let chatInfo = activeChat;
@@ -520,7 +508,7 @@ export default function Chat() {
         await program.sendE2EMessage(
           chatInfo.chatId,
           msgIndex,
-          `PAY:${amount}:${currency}:${txSig}`,
+          `PAY:${amount}:USDC:${txSig}`,
           encryptionKeys.secretKey,
           peerKey
         );
@@ -528,21 +516,20 @@ export default function Chat() {
         await program.sendMessageSimple(
           chatInfo.chatId,
           msgIndex,
-          `PLAIN:PAY:${amount}:${currency}:${txSig}`
+          `PLAIN:PAY:${amount}:USDC:${txSig}`
         );
       }
 
       setChats(prev => prev.map(c =>
         c.friendAddress === chatInfo!.friendAddress
-          ? { ...c, lastMessage: `💸 ${amount} ${currency}`, lastMessageTime: Date.now(), exists: true, messageCount: msgIndex + 1 }
+          ? { ...c, lastMessage: `💸 ${amount} USDC`, lastMessageTime: Date.now(), exists: true, messageCount: msgIndex + 1 }
           : c
       ));
 
-      toast("success", "Payment sent! 💸", `${amount} ${currency} → @${activeChat.friend.username}`);
+      toast("success", "Payment sent! 💸", `${amount} USDC → @${activeChat.friend.username}`);
       setShowPayment(false);
       setPaymentAmount("");
       resetMb();
-      resetSol();
     } catch (err: any) {
       console.error("Payment error:", err);
       toast("error", "Payment failed", err?.message?.slice(0, 80) || "Transaction failed");
@@ -894,56 +881,28 @@ export default function Chat() {
 
 
 
-            {/* Payment Panel */}
+            {/* Private Payment Panel */}
             {showPayment && (
               <div className="border-t border-[#E2E8F0] bg-gradient-to-b from-[#F5F3FF] to-white px-3 py-3">
                 <div className="flex items-center justify-between mb-2.5">
                   <div className="flex items-center gap-1.5">
-                    <DollarSign className="w-4 h-4 text-[#7C3AED]" />
-                    <span className="text-sm font-semibold text-[#1A1A2E]">Send Payment</span>
+                    <EyeOff className="w-4 h-4 text-[#7C3AED]" />
+                    <span className="text-sm font-semibold text-[#1A1A2E]">Private USDC Payment</span>
                   </div>
-                  <button onClick={() => { setShowPayment(false); setPaymentAmount(""); resetMb(); resetSol(); }} className="p-1 rounded-lg hover:bg-[#E2E8F0] transition-colors">
+                  <button onClick={() => { setShowPayment(false); setPaymentAmount(""); resetMb(); }} className="p-1 rounded-lg hover:bg-[#E2E8F0] transition-colors">
                     <X className="w-4 h-4 text-[#94A3B8]" />
-                  </button>
-                </div>
-
-                {/* Privacy Toggle */}
-                <div className="flex gap-1.5 mb-2.5">
-                  <button
-                    onClick={() => setPaymentMode("private")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      paymentMode === "private"
-                        ? "bg-[#7C3AED] text-white shadow-sm"
-                        : "bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]"
-                    }`}
-                  >
-                    <EyeOff className="w-3 h-3" />
-                    Private USDC
-                  </button>
-                  <button
-                    onClick={() => setPaymentMode("public")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      paymentMode === "public"
-                        ? "bg-[#2563EB] text-white shadow-sm"
-                        : "bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]"
-                    }`}
-                  >
-                    <Eye className="w-3 h-3" />
-                    Public SOL
                   </button>
                 </div>
 
                 {/* Amount Input */}
                 <div className="flex items-center gap-2 mb-2.5">
                   <div className="flex-1 relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#94A3B8] font-medium">
-                      {paymentMode === "private" ? "$" : "◎"}
-                    </span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#94A3B8] font-medium">$</span>
                     <input
                       type="number"
                       value={paymentAmount}
                       onChange={(e) => setPaymentAmount(e.target.value)}
-                      placeholder={paymentMode === "private" ? "0.00 USDC" : "0.00 SOL"}
+                      placeholder="0.00 USDC"
                       step="0.01"
                       min="0"
                       className="w-full bg-white border border-[#E2E8F0] rounded-xl pl-7 pr-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
@@ -953,11 +912,7 @@ export default function Chat() {
                   <button
                     onClick={handleSendPayment}
                     disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || paymentSending}
-                    className={`h-10 px-4 rounded-xl text-white text-sm font-medium flex items-center gap-1.5 transition-all disabled:opacity-40 ${
-                      paymentMode === "private"
-                        ? "bg-[#7C3AED] hover:bg-[#6D28D9]"
-                        : "bg-[#2563EB] hover:bg-[#1D4ED8]"
-                    }`}
+                    className="h-10 px-4 rounded-xl text-white text-sm font-medium flex items-center gap-1.5 transition-all disabled:opacity-40 bg-[#7C3AED] hover:bg-[#6D28D9]"
                   >
                     {paymentSending ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -970,13 +925,13 @@ export default function Chat() {
 
                 {/* Quick Amounts */}
                 <div className="flex gap-1.5 mb-2">
-                  {(paymentMode === "private" ? [1, 5, 10, 25] : [0.1, 0.5, 1, 5]).map((amt) => (
+                  {[1, 5, 10, 25].map((amt) => (
                     <button
                       key={amt}
                       onClick={() => setPaymentAmount(amt.toString())}
                       className="flex-1 py-1.5 rounded-lg text-xs font-medium bg-white border border-[#E2E8F0] text-[#64748B] hover:bg-[#F1F5F9] hover:border-[#7C3AED]/30 transition-all"
                     >
-                      {paymentMode === "private" ? `$${amt}` : `${amt} ◎`}
+                      ${amt}
                     </button>
                   ))}
                 </div>
@@ -986,19 +941,12 @@ export default function Chat() {
                   <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-[#7C3AED]/5">
                     <Loader2 className="w-3 h-3 text-[#7C3AED] animate-spin flex-shrink-0" />
                     <span className="text-[11px] text-[#7C3AED] font-medium">
-                      {paymentMode === "private"
-                        ? mbStep === "building" ? "Building private transaction..."
-                          : mbStep === "signing" ? "Sign in your wallet..."
-                          : mbStep === "sending" ? "Sending via MagicBlock..."
-                          : mbStep === "confirming" ? "Confirming on-chain..."
-                          : mbStep === "done" ? "Recording in chat..."
-                          : "Processing..."
-                        : solStep === "sending" ? "Sending SOL..."
-                          : solStep === "confirming" ? "Confirming..."
-                          : solStep === "recording" ? "Recording..."
-                          : solStep === "done" ? "Recording in chat..."
-                          : "Processing..."
-                      }
+                      {mbStep === "building" ? "Building private transaction..."
+                        : mbStep === "signing" ? "Sign in your wallet..."
+                        : mbStep === "sending" ? "Sending via MagicBlock..."
+                        : mbStep === "confirming" ? "Confirming on-chain..."
+                        : mbStep === "done" ? "Recording in chat..."
+                        : "Processing..."}
                     </span>
                   </div>
                 )}
@@ -1006,12 +954,7 @@ export default function Chat() {
                 {/* Privacy Info */}
                 <div className="flex items-center gap-1.5 mt-1">
                   <Shield className="w-3 h-3 text-[#94A3B8]" />
-                  <span className="text-[10px] text-[#94A3B8]">
-                    {paymentMode === "private"
-                      ? "Private via MagicBlock TEE — amount hidden on-chain"
-                      : "Public SOL transfer — visible on-chain"
-                    }
-                  </span>
+                  <span className="text-[10px] text-[#94A3B8]">Private via MagicBlock TEE — amount hidden on-chain</span>
                 </div>
               </div>
             )}
@@ -1020,7 +963,7 @@ export default function Chat() {
             <div className="p-2.5 sm:p-3 border-t border-[#E2E8F0] bg-white">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setShowPayment(!showPayment); resetMb(); resetSol(); }}
+                  onClick={() => { setShowPayment(!showPayment); resetMb(); }}
                   className={`touch-active w-10 h-10 rounded-xl flex items-center justify-center transition-all flex-shrink-0 ${
                     showPayment
                       ? "bg-[#7C3AED] text-white"
