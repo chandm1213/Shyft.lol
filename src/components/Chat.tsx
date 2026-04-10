@@ -445,10 +445,12 @@ export default function Chat() {
 
       if (paymentMode === "private") {
         // MagicBlock private USDC transfer
-        txSig = await sendPrivatePayment(recipientAddress, amount, "private");
+        const result = await sendPrivatePayment(recipientAddress, amount, "private");
+        txSig = result?.transferSig || null;
       } else {
         // Public SOL transfer
-        txSig = await sendSolPayment(recipientAddress, amount);
+        const result = await sendSolPayment(recipientAddress, amount);
+        txSig = result?.transferSig || null;
       }
 
       if (!txSig) {
