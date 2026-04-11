@@ -19,7 +19,7 @@ import { useAppStore } from "@/lib/store";
  */
 
 const MAGICBLOCK_API = "https://payments.magicblock.app";
-const USDC_MINT_MAINNET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const WSOL_MINT = "So11111111111111111111111111111111111111112";
 
 // MagicBlock ephemeral rollup RPC (for sending to ephemeral when sendTo === "ephemeral")
 const MAGICBLOCK_EPHEMERAL_RPC = "https://ephemeral.magicblock.app";
@@ -74,16 +74,16 @@ export function useMagicBlockPayment() {
 
         // --- Step 1: Request unsigned tx from MagicBlock API ---
         setStep("building");
-        console.log(`🔒 MagicBlock ${visibility} USDC transfer: ${amount} USDC to ${recipientAddress.slice(0, 8)}...`);
+        console.log(`🔒 MagicBlock ${visibility} SOL transfer: ${amount} SOL to ${recipientAddress.slice(0, 8)}...`);
 
-        // Amount in USDC smallest unit (6 decimals)
-        const usdcAmount = Math.round(amount * 1_000_000);
+        // Amount in lamports (9 decimals for SOL)
+        const lamports = Math.round(amount * 1_000_000_000);
 
         const basePay = {
           from: publicKey.toBase58(),
           to: recipientPubkey.toBase58(),
-          mint: USDC_MINT_MAINNET,
-          amount: usdcAmount,
+          mint: WSOL_MINT,
+          amount: lamports,
           visibility,
           fromBalance: "base",
           toBalance: "base",
@@ -182,7 +182,7 @@ export function useMagicBlockPayment() {
           sender: "me",
           recipient: recipientAddress,
           amount,
-          token: "USDC",
+          token: "SOL",
           status: "completed",
           isPrivate: visibility === "private",
           timestamp: Date.now(),
@@ -198,7 +198,7 @@ export function useMagicBlockPayment() {
         const raw = err?.message || "Private payment failed";
         let msg = raw;
         if (raw.includes("insufficient funds") || raw.includes("custom program error: 0x1")) {
-          msg = "Insufficient USDC balance. Please add USDC to your wallet and try again.";
+          msg = "Insufficient SOL balance. Please add SOL to your wallet and try again.";
         } else if (raw.includes("User exited") || raw.includes("user rejected") || raw.includes("Failed to connect to wallet")) {
           msg = "Transaction cancelled.";
           setStep("idle"); // Not a real error — user just dismissed the modal
@@ -213,7 +213,7 @@ export function useMagicBlockPayment() {
           sender: "me",
           recipient: recipientAddress,
           amount,
-          token: "USDC",
+          token: "SOL",
           status: "failed",
           isPrivate: visibility === "private",
           timestamp: Date.now(),
