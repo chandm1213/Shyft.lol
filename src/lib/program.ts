@@ -31,8 +31,14 @@ function compressIpfsUrl(url: string): string {
 /** Expand a bare CID back to a full IPFS gateway URL. */
 function expandIpfsUrl(stored: string): string {
   if (!stored) return stored;
-  // Already a full URL — return as-is
-  if (stored.startsWith("http")) return stored;
+  // Already a full URL — rewrite private/dedicated Pinata gateways to public
+  if (stored.startsWith("http")) {
+    const cidMatch = stored.match(IPFS_CID_REGEX);
+    if (cidMatch && !stored.includes(IPFS_GATEWAY)) {
+      return `https://${IPFS_GATEWAY}/ipfs/${cidMatch[1]}`;
+    }
+    return stored;
+  }
   // Looks like a bare CID (bafkrei... or Qm...)
   if (stored.startsWith("baf") || stored.startsWith("Qm")) {
     return `https://${IPFS_GATEWAY}/ipfs/${stored}`;
