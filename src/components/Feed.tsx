@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2, Coins, TrendingUp } from "lucide-react";
+import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2, Coins, TrendingUp, BarChart3, Clock, CheckCircle2 } from "lucide-react";
 
 // Gold badge for OG / founder accounts
 const GOLD_BADGE_USERNAMES = ["shaan", "shyft"];
@@ -956,6 +956,215 @@ export function OnChainPostCard({
   );
 }
 
+/** On-chain Poll Card with vote buttons, progress bars, countdown */
+function PollCard({
+  poll,
+  profile,
+  isMe,
+  program,
+  myVote,
+  onVoted,
+}: {
+  poll: any;
+  profile: any;
+  isMe: boolean;
+  program: ShyftClient | null;
+  myVote: { voted: boolean; choice?: number } | null;
+  onVoted: () => void;
+}) {
+  const { isConnected, navigateToProfile } = useAppStore();
+  const [voting, setVoting] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [localVote, setLocalVote] = useState<number | null>(null);
+
+  const now = Date.now();
+  const hasEnded = poll.isClosed || now >= poll.endsAt;
+  const hasVoted = myVote?.voted || localVote !== null;
+  const votedChoice = localVote ?? myVote?.choice;
+  const showResults = hasVoted || hasEnded;
+
+  const options = [
+    { label: poll.optionA, votes: poll.votesA },
+    { label: poll.optionB, votes: poll.votesB },
+    ...(poll.numOptions >= 3 ? [{ label: poll.optionC, votes: poll.votesC }] : []),
+    ...(poll.numOptions >= 4 ? [{ label: poll.optionD, votes: poll.votesD }] : []),
+  ];
+
+  const totalVotes = (localVote !== null ? poll.totalVotes + 1 : poll.totalVotes) || 0;
+
+  // Countdown
+  const timeLeft = poll.endsAt - now;
+  const formatTimeLeft = () => {
+    if (timeLeft <= 0) return "Ended";
+    const hrs = Math.floor(timeLeft / 3_600_000);
+    const mins = Math.floor((timeLeft % 3_600_000) / 60_000);
+    if (hrs > 24) return `${Math.floor(hrs / 24)}d ${hrs % 24}h left`;
+    if (hrs > 0) return `${hrs}h ${mins}m left`;
+    return `${mins}m left`;
+  };
+
+  const handleVote = async (choice: number) => {
+    if (!program || voting || hasVoted || hasEnded) return;
+    setVoting(true);
+    try {
+      const creatorPk = new PublicKey(poll.creator);
+      await program.votePoll(creatorPk, poll.pollId, choice);
+      setLocalVote(choice);
+      toast("success", "Vote recorded on-chain! 🗳️");
+      setTimeout(() => onVoted(), 1500);
+    } catch (err: any) {
+      const msg = err?.message || "";
+      if (msg.includes("User rejected") || msg.includes("rejected the request")) {
+        // silent
+      } else if (msg.includes("already ended") || msg.includes("PollAlreadyEnded")) {
+        toast("error", "Poll has ended");
+      } else if (msg.includes("AlreadyInitialized")) {
+        toast("error", "You already voted on this poll");
+        setLocalVote(0); // show results
+      } else {
+        toast("error", "Vote failed", msg.slice(0, 100));
+      }
+    }
+    setVoting(false);
+  };
+
+  const handleClose = async () => {
+    if (!program || closing) return;
+    setClosing(true);
+    try {
+      await program.closePoll(poll.pollId);
+      toast("success", "Poll closed");
+      setTimeout(() => onVoted(), 1500);
+    } catch (err: any) {
+      toast("error", "Close failed", err?.message?.slice(0, 80));
+    }
+    setClosing(false);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4 sm:p-5 mb-3 hover:shadow-sm transition-shadow">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-3">
+        {profile?.avatarUrl ? (
+          <img
+            src={profile.avatarUrl}
+            alt=""
+            className="w-10 h-10 rounded-full object-cover cursor-pointer border-2 border-white shadow-sm"
+            onClick={() => navigateToProfile(poll.creator)}
+          />
+        ) : (
+          <div
+            className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center text-lg font-bold text-purple-600 cursor-pointer"
+            onClick={() => navigateToProfile(poll.creator)}
+          >
+            {(profile?.displayName || "?").charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="font-bold text-[15px] text-[#1A1A2E] truncate cursor-pointer hover:underline"
+              onClick={() => navigateToProfile(poll.creator)}
+            >
+              {profile?.displayName || poll.creator.slice(0, 8)}
+            </span>
+            <BarChart3 className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+            <span className="text-xs font-medium text-purple-500">Poll</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
+            <span>{timeAgo(poll.createdAt)}</span>
+            <span>·</span>
+            <div className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              <span className={hasEnded ? "text-red-400 font-medium" : "text-emerald-500 font-medium"}>
+                {formatTimeLeft()}
+              </span>
+            </div>
+          </div>
+        </div>
+        {isMe && !poll.isClosed && (
+          <button
+            onClick={handleClose}
+            disabled={closing}
+            className="text-xs text-[#94A3B8] hover:text-red-500 transition-colors px-2 py-1"
+          >
+            {closing ? "Closing..." : "End Poll"}
+          </button>
+        )}
+      </div>
+
+      {/* Question */}
+      <p className="text-[15px] font-semibold text-[#1A1A2E] mb-3 leading-snug">{poll.question}</p>
+
+      {/* Options */}
+      <div className="space-y-2">
+        {options.map((opt, i) => {
+          const optVotes = (localVote === i ? opt.votes + 1 : opt.votes) || 0;
+          const pct = totalVotes > 0 ? Math.round((optVotes / totalVotes) * 100) : 0;
+          const isMyVote = votedChoice === i;
+          const isWinner = showResults && optVotes === Math.max(...options.map((o, j) => (localVote === j ? o.votes + 1 : o.votes) || 0));
+
+          return (
+            <button
+              key={i}
+              onClick={() => handleVote(i)}
+              disabled={showResults || voting || !isConnected}
+              className={`relative w-full text-left rounded-xl border transition-all overflow-hidden ${
+                showResults
+                  ? isMyVote
+                    ? "border-purple-300 bg-purple-50/50"
+                    : "border-[#E2E8F0] bg-[#F8FAFC]"
+                  : "border-[#E2E8F0] hover:border-purple-300 hover:bg-purple-50/30 active:scale-[0.99] cursor-pointer"
+              }`}
+            >
+              {/* Progress bar bg */}
+              {showResults && (
+                <div
+                  className={`absolute inset-0 rounded-xl transition-all duration-700 ease-out ${
+                    isWinner ? "bg-purple-100/80" : "bg-[#F1F5F9]/80"
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              )}
+              <div className="relative flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {showResults && isMyVote && (
+                    <CheckCircle2 className="w-4 h-4 text-purple-500 flex-shrink-0" />
+                  )}
+                  <span className={`text-sm font-medium truncate ${
+                    showResults && isWinner ? "text-purple-700" : "text-[#334155]"
+                  }`}>
+                    {opt.label}
+                  </span>
+                </div>
+                {showResults && (
+                  <span className={`text-sm font-bold flex-shrink-0 ml-2 ${
+                    isWinner ? "text-purple-600" : "text-[#94A3B8]"
+                  }`}>
+                    {pct}%
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#F1F5F9]">
+        <span className="text-xs text-[#94A3B8]">
+          {totalVotes} vote{totalVotes !== 1 ? "s" : ""}
+        </span>
+        {voting && (
+          <span className="text-xs text-purple-500 animate-pulse flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" /> Voting...
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Feed() {
   const { isConnected, currentUser, focusPostKey, setFocusPostKey, navigateToProfile } = useAppStore();
   const [newPost, setNewPost] = useState("");
@@ -974,6 +1183,17 @@ export default function Feed() {
   const [uploading, setUploading] = useState(false);
   const [isPaidPost, setIsPaidPost] = useState(false);
   const [paidPrice, setPaidPrice] = useState("0.01");
+
+  // Poll creation state
+  const [isPollMode, setIsPollMode] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [pollDuration, setPollDuration] = useState("24"); // hours
+  const [creatingPoll, setCreatingPoll] = useState(false);
+
+  // Poll display state
+  const [allPolls, setAllPolls] = useState<any[]>([]);
+  const [myVotes, setMyVotes] = useState<Record<string, { voted: boolean; choice?: number }>>({});
 
   // @mention click handler — resolves username → wallet and navigates to profile
   useEffect(() => {
@@ -1009,15 +1229,17 @@ export default function Feed() {
     if (!program || !publicKey) return;
     setLoadingOnchain(true);
     try {
-      const [allMapped, profiles, comments, reactions] = await Promise.all([
+      const [allMapped, profiles, comments, reactions, polls] = await Promise.all([
         program.getAllPosts(),
         program.getAllProfiles(),
         program.getAllComments(),
         program.getAllReactions(),
+        program.getAllPolls(),
       ]);
 
       setAllComments(comments);
       setAllReactions(reactions);
+      setAllPolls(polls);
 
       // Show all posts: free (public) + paid (private with PAID| prefix), exclude community posts
       const visiblePosts = allMapped.filter((p: any) => !p.content.startsWith("COMM|") && (!p.isPrivate || p.content.startsWith("PAID|")));
@@ -1027,6 +1249,20 @@ export default function Feed() {
       const map: Record<string, any> = {};
       profiles.forEach((p: any) => { map[p.owner] = p; });
       setProfileMap(map);
+
+      // Check user's votes on all polls
+      if (polls.length > 0) {
+        const voteMap: Record<string, { voted: boolean; choice?: number }> = {};
+        for (const poll of polls) {
+          try {
+            const result = await program.hasVoted(new PublicKey(poll.pubkey), publicKey);
+            voteMap[poll.pubkey] = result;
+          } catch {
+            voteMap[poll.pubkey] = { voted: false };
+          }
+        }
+        setMyVotes(voteMap);
+      }
     } catch (err) {
       console.error("Failed to fetch on-chain posts:", err);
     }
@@ -1050,13 +1286,15 @@ export default function Feed() {
   const refreshFeed = async () => {
     if (!program) return;
     try {
-      const [allMapped, comments, reactions] = await Promise.all([
+      const [allMapped, comments, reactions, polls] = await Promise.all([
         program.getAllPosts(),
         program.getAllComments(),
         program.getAllReactions(),
+        program.getAllPolls(),
       ]);
       setAllComments(comments);
       setAllReactions(reactions);
+      setAllPolls(polls);
       const visiblePosts = allMapped.filter((p: any) => !p.content.startsWith("COMM|") && (!p.isPrivate || p.content.startsWith("PAID|")));
       setOnchainPosts(visiblePosts.sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt)));
     } catch (err) {
@@ -1154,6 +1392,42 @@ export default function Feed() {
     }
   };
 
+  const handleCreatePoll = async () => {
+    if (!program || !publicKey || creatingPoll) return;
+    const filledOptions = pollOptions.filter(o => o.trim());
+    if (!pollQuestion.trim()) { toast("error", "Enter a question"); return; }
+    if (filledOptions.length < 2) { toast("error", "Need at least 2 options"); return; }
+
+    setCreatingPoll(true);
+    try {
+      const profile = await program.getProfile(publicKey);
+      if (!profile) { toast("error", "Profile required", "Create a profile first"); setCreatingPoll(false); return; }
+
+      const pollId = Date.now();
+      const durationHours = parseFloat(pollDuration) || 24;
+      const endsAt = Math.floor(Date.now() / 1000) + Math.round(durationHours * 3600);
+
+      toast("privacy", "Creating poll...", "Publishing to Solana");
+      await program.createPoll(pollId, pollQuestion.trim(), filledOptions.map(o => o.trim()), endsAt);
+      toast("success", "Poll live on-chain! 📊");
+
+      // Reset
+      setIsPollMode(false);
+      setPollQuestion("");
+      setPollOptions(["", ""]);
+      setPollDuration("24");
+      setTimeout(() => fetchOnchainPosts(), 1500);
+    } catch (err: any) {
+      const msg = err?.message || "";
+      if (msg.includes("User rejected") || msg.includes("rejected the request")) {
+        // silent
+      } else {
+        toast("error", "Poll creation failed", msg.slice(0, 100));
+      }
+    }
+    setCreatingPoll(false);
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
       {/* Compose */}
@@ -1221,6 +1495,82 @@ export default function Feed() {
               </div>
             </div>
           )}
+          {/* Poll creation panel */}
+          {isPollMode && (
+            <div className="mt-3 p-3 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl space-y-2.5 animate-fade-in">
+              <div className="flex items-center gap-2 mb-1">
+                <BarChart3 className="w-4 h-4 text-purple-600" />
+                <span className="text-xs font-semibold text-purple-700">Create Poll</span>
+              </div>
+              <input
+                value={pollQuestion}
+                onChange={(e) => setPollQuestion(e.target.value)}
+                maxLength={200}
+                placeholder="Ask a question..."
+                className="w-full px-3 py-2 text-sm bg-white border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 placeholder:text-[#94A3B8]"
+              />
+              {pollOptions.map((opt, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-purple-400 w-5">{String.fromCharCode(65 + i)}</span>
+                  <input
+                    value={opt}
+                    onChange={(e) => {
+                      const next = [...pollOptions];
+                      next[i] = e.target.value;
+                      setPollOptions(next);
+                    }}
+                    maxLength={50}
+                    placeholder={`Option ${String.fromCharCode(65 + i)}`}
+                    className="flex-1 px-3 py-1.5 text-sm bg-white border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 placeholder:text-[#94A3B8]"
+                  />
+                  {i >= 2 && (
+                    <button
+                      onClick={() => setPollOptions(pollOptions.filter((_, j) => j !== i))}
+                      className="text-purple-300 hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <div className="flex items-center justify-between">
+                {pollOptions.length < 4 && (
+                  <button
+                    onClick={() => setPollOptions([...pollOptions, ""])}
+                    className="text-xs font-medium text-purple-500 hover:text-purple-700 transition-colors"
+                  >
+                    + Add option
+                  </button>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  <Clock className="w-3.5 h-3.5 text-purple-400" />
+                  <select
+                    value={pollDuration}
+                    onChange={(e) => setPollDuration(e.target.value)}
+                    className="text-xs font-medium text-purple-600 bg-white border border-purple-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                  >
+                    <option value="1">1 hour</option>
+                    <option value="6">6 hours</option>
+                    <option value="12">12 hours</option>
+                    <option value="24">1 day</option>
+                    <option value="72">3 days</option>
+                    <option value="168">7 days</option>
+                  </select>
+                </div>
+              </div>
+              <button
+                onClick={handleCreatePoll}
+                disabled={creatingPoll || !pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2}
+                className="w-full py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white text-sm font-bold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shadow-purple-200"
+              >
+                {creatingPoll ? (
+                  <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Creating poll...</span>
+                ) : (
+                  "Create Poll 📊"
+                )}
+              </button>
+            </div>
+          )}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F1F5F9] gap-3">
             <div className="flex items-center gap-1">
               <MediaBar
@@ -1236,7 +1586,7 @@ export default function Feed() {
               {/* Paid post toggle */}
               <button
                 type="button"
-                onClick={() => setIsPaidPost(!isPaidPost)}
+                onClick={() => { setIsPaidPost(!isPaidPost); if (!isPaidPost) setIsPollMode(false); }}
                 className={`touch-active flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   isPaidPost
                     ? "text-amber-600 bg-amber-50 border border-amber-200"
@@ -1245,6 +1595,19 @@ export default function Feed() {
                 title={isPaidPost ? "Make post free" : "Make post paid"}
               >
                 {isPaidPost ? <Lock className="w-3.5 h-3.5" /> : <DollarSign className="w-3.5 h-3.5" />}
+              </button>
+              {/* Poll toggle */}
+              <button
+                type="button"
+                onClick={() => { setIsPollMode(!isPollMode); if (!isPollMode) setIsPaidPost(false); }}
+                className={`touch-active flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  isPollMode
+                    ? "text-purple-600 bg-purple-50 border border-purple-200"
+                    : "text-[#94A3B8] hover:text-purple-600 hover:bg-purple-50"
+                }`}
+                title="Create a poll"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
               </button>
             </div>
             {uploading && (
@@ -1294,46 +1657,73 @@ export default function Feed() {
             </button>
           </div>
 
-          {onchainPosts.length === 0 && !loadingOnchain && (
+          {onchainPosts.length === 0 && allPolls.length === 0 && !loadingOnchain && (
             <div className="bg-[#F8FAFC] rounded-xl p-6 text-center border border-[#E2E8F0]">
               <p className="text-sm text-[#94A3B8]">No public posts on-chain yet. Be the first!</p>
             </div>
           )}
 
-          {onchainPosts.map((post) => {
-            const profile = profileMap[post.author];
-            const isMe = publicKey ? post.author === publicKey.toBase58() : false;
-            return (
-              <div key={post.publicKey} id={`post-${post.publicKey}`} className="transition-all duration-300 rounded-2xl">
-              <OnChainPostCard
-                post={post}
-                profile={profile}
-                isMe={isMe}
-                program={program}
-                allComments={allComments}
-                allReactions={allReactions}
-                profileMap={profileMap}
-                onCommentAdded={refreshInteractions}
-                onReactionAdded={refreshInteractions}
-                defaultShowComments={focusPostKey === post.publicKey}
-                onRepost={async (content: string) => {
-                  if (!program || !publicKey) return;
-                  const postId = Date.now();
-                  try {
-                    await program.createPost(postId, content, false);
-                    toast("success", "Repost published! 🔁", "On-chain");
+          {/* Merge posts and polls into a single timeline sorted by createdAt */}
+          {(() => {
+            const feedItems: { type: "post" | "poll"; data: any; createdAt: number }[] = [
+              ...onchainPosts.map(p => ({ type: "post" as const, data: p, createdAt: Number(p.createdAt) })),
+              ...allPolls.map(p => ({ type: "poll" as const, data: p, createdAt: p.createdAt })),
+            ].sort((a, b) => b.createdAt - a.createdAt);
+
+            return feedItems.map((item) => {
+              if (item.type === "poll") {
+                const poll = item.data;
+                const profile = profileMap[poll.creator];
+                const isMe = publicKey ? poll.creator === publicKey.toBase58() : false;
+                return (
+                  <PollCard
+                    key={`poll-${poll.pubkey}`}
+                    poll={poll}
+                    profile={profile}
+                    isMe={isMe}
+                    program={program}
+                    myVote={myVotes[poll.pubkey] || null}
+                    onVoted={() => {
+                      setTimeout(() => fetchOnchainPosts(), 1500);
+                    }}
+                  />
+                );
+              }
+              const post = item.data;
+              const profile = profileMap[post.author];
+              const isMe = publicKey ? post.author === publicKey.toBase58() : false;
+              return (
+                <div key={post.publicKey} id={`post-${post.publicKey}`} className="transition-all duration-300 rounded-2xl">
+                <OnChainPostCard
+                  post={post}
+                  profile={profile}
+                  isMe={isMe}
+                  program={program}
+                  allComments={allComments}
+                  allReactions={allReactions}
+                  profileMap={profileMap}
+                  onCommentAdded={refreshInteractions}
+                  onReactionAdded={refreshInteractions}
+                  defaultShowComments={focusPostKey === post.publicKey}
+                  onRepost={async (content: string) => {
+                    if (!program || !publicKey) return;
+                    const postId = Date.now();
+                    try {
+                      await program.createPost(postId, content, false);
+                      toast("success", "Repost published! 🔁", "On-chain");
+                      setTimeout(() => fetchOnchainPosts(), 1500);
+                    } catch (err: any) {
+                      toast("error", "Repost failed", err?.message?.slice(0, 80) || "Try again");
+                    }
+                  }}
+                  onDelete={() => {
                     setTimeout(() => fetchOnchainPosts(), 1500);
-                  } catch (err: any) {
-                    toast("error", "Repost failed", err?.message?.slice(0, 80) || "Try again");
-                  }
-                }}
-                onDelete={() => {
-                  setTimeout(() => fetchOnchainPosts(), 1500);
-                }}
-              />
-              </div>
-            );
-          })}
+                  }}
+                />
+                </div>
+              );
+            });
+          })()}
         </div>
       )}
     </div>

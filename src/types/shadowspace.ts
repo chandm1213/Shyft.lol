@@ -321,6 +321,58 @@ export type Shadowspace = {
       ]
     },
     {
+      "name": "closePoll",
+      "discriminator": [
+        139,
+        213,
+        162,
+        65,
+        172,
+        150,
+        123,
+        67
+      ],
+      "accounts": [
+        {
+          "name": "poll",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "poll.creator",
+                "account": "poll"
+              },
+              {
+                "kind": "arg",
+                "path": "pollId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "pollId",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "closePost",
       "docs": [
         "Close a post account and return rent to the author"
@@ -829,6 +881,119 @@ export type Shadowspace = {
         {
           "name": "avatarUrl",
           "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "createPoll",
+      "discriminator": [
+        182,
+        171,
+        112,
+        238,
+        6,
+        219,
+        14,
+        110
+      ],
+      "accounts": [
+        {
+          "name": "poll",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "profile.owner",
+                "account": "profile"
+              },
+              {
+                "kind": "arg",
+                "path": "pollId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "pollId",
+          "type": "u64"
+        },
+        {
+          "name": "question",
+          "type": "string"
+        },
+        {
+          "name": "optionA",
+          "type": "string"
+        },
+        {
+          "name": "optionB",
+          "type": "string"
+        },
+        {
+          "name": "optionC",
+          "type": "string"
+        },
+        {
+          "name": "optionD",
+          "type": "string"
+        },
+        {
+          "name": "numOptions",
+          "type": "u8"
+        },
+        {
+          "name": "endsAt",
+          "type": "i64"
         }
       ]
     },
@@ -1934,6 +2099,125 @@ export type Shadowspace = {
           "type": "string"
         }
       ]
+    },
+    {
+      "name": "votePoll",
+      "discriminator": [
+        154,
+        219,
+        48,
+        148,
+        149,
+        7,
+        153,
+        194
+      ],
+      "accounts": [
+        {
+          "name": "poll",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "poll.creator",
+                "account": "poll"
+              },
+              {
+                "kind": "arg",
+                "path": "pollId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pollVote",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  108,
+                  95,
+                  118,
+                  111,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "poll"
+              },
+              {
+                "kind": "account",
+                "path": "voter_profile.owner",
+                "account": "profile"
+              }
+            ]
+          }
+        },
+        {
+          "name": "voterProfile",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "pollId",
+          "type": "u64"
+        },
+        {
+          "name": "choice",
+          "type": "u8"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -2016,6 +2300,32 @@ export type Shadowspace = {
       ]
     },
     {
+      "name": "poll",
+      "discriminator": [
+        110,
+        234,
+        167,
+        188,
+        231,
+        136,
+        153,
+        111
+      ]
+    },
+    {
+      "name": "pollVote",
+      "discriminator": [
+        60,
+        154,
+        212,
+        155,
+        112,
+        25,
+        150,
+        182
+      ]
+    },
+    {
       "name": "post",
       "discriminator": [
         8,
@@ -2095,6 +2405,21 @@ export type Shadowspace = {
       "code": 6007,
       "name": "alreadyInitialized",
       "msg": "Account already initialized"
+    },
+    {
+      "code": 6008,
+      "name": "invalidPollOptions",
+      "msg": "Poll must have 2-4 options"
+    },
+    {
+      "code": 6009,
+      "name": "invalidPollChoice",
+      "msg": "Invalid poll choice"
+    },
+    {
+      "code": 6010,
+      "name": "pollAlreadyEnded",
+      "msg": "Poll has ended"
     }
   ],
   "types": [
@@ -2257,6 +2582,102 @@ export type Shadowspace = {
           },
           {
             "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "poll",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "pollId",
+            "type": "u64"
+          },
+          {
+            "name": "question",
+            "type": "string"
+          },
+          {
+            "name": "optionA",
+            "type": "string"
+          },
+          {
+            "name": "optionB",
+            "type": "string"
+          },
+          {
+            "name": "optionC",
+            "type": "string"
+          },
+          {
+            "name": "optionD",
+            "type": "string"
+          },
+          {
+            "name": "numOptions",
+            "type": "u8"
+          },
+          {
+            "name": "votesA",
+            "type": "u32"
+          },
+          {
+            "name": "votesB",
+            "type": "u32"
+          },
+          {
+            "name": "votesC",
+            "type": "u32"
+          },
+          {
+            "name": "votesD",
+            "type": "u32"
+          },
+          {
+            "name": "totalVotes",
+            "type": "u32"
+          },
+          {
+            "name": "endsAt",
+            "type": "i64"
+          },
+          {
+            "name": "isClosed",
+            "type": "bool"
+          },
+          {
+            "name": "createdAt",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "pollVote",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "poll",
+            "type": "pubkey"
+          },
+          {
+            "name": "voter",
+            "type": "pubkey"
+          },
+          {
+            "name": "choice",
+            "type": "u8"
+          },
+          {
+            "name": "votedAt",
             "type": "i64"
           }
         ]

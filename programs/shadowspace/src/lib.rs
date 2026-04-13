@@ -11,6 +11,8 @@ pub const COMMENT_SEED: &[u8] = b"comment";
 pub const REACTION_SEED: &[u8] = b"reaction";
 pub const COMMUNITY_SEED: &[u8] = b"community";
 pub const MEMBERSHIP_SEED: &[u8] = b"membership";
+pub const POLL_SEED: &[u8] = b"poll";
+pub const POLL_VOTE_SEED: &[u8] = b"poll_vote";
 
 /// Hardcoded treasury wallet — ALL rent refunds MUST go here.
 pub const TREASURY_PUBKEY: Pubkey = pubkey!("4tpjCdXS1fKiYoBYLvTNNyHwzTAhuigB3TY6Wd2QbxT9");
@@ -244,6 +246,99 @@ pub mod shadowspace {
 
     pub fn close_community(ctx: Context<CloseCommunity>, _community_id: u64) -> Result<()> {
         msg!("Community {} closed by creator", ctx.accounts.community.community_id);
+        Ok(())
+    }
+
+    // ========== POLLS / VOTING ==========
+
+    pub fn create_poll(
+        ctx: Context<CreatePoll>,
+        poll_id: u64,
+        question: String,
+        option_a: String,
+        option_b: String,
+        option_c: String,
+        option_d: String,
+        num_options: u8,
+        ends_at: i64,
+    ) -> Result<()> {
+        require!(question.len() <= 200, ShadowError::ContentTooLong);
+        require!(option_a.len() <= 50, ShadowError::ContentTooLong);
+        require!(option_b.len() <= 50, ShadowError::ContentTooLong);
+        require!(option_c.len() <= 50, ShadowError::ContentTooLong);
+        require!(option_d.len() <= 50, ShadowError::ContentTooLong);
+        require!(num_options >= 2 && num_options <= 4, ShadowError::InvalidPollOptions);
+
+        let now = Clock::get()?.unix_timestamp;
+        require!(ends_at > now, ShadowError::PollAlreadyEnded);
+        // Cap poll duration at 30 days to prevent indefinite polls
+        require!(ends_at <= now + 30 * 24 * 60 * 60, ShadowError::PollAlreadyEnded);
+
+        let poll = &mut ctx.accounts.poll;
+
+        poll.creator = ctx.accounts.profile.owner;
+        poll.poll_id = poll_id;
+        poll.question = question;
+        poll.option_a = option_a;
+        poll.option_b = option_b;
+        poll.option_c = option_c;
+        poll.option_d = option_d;
+        poll.num_options = num_options;
+        poll.votes_a = 0;
+        poll.votes_b = 0;
+        poll.votes_c = 0;
+        poll.votes_d = 0;
+        poll.total_votes = 0;
+        poll.ends_at = ends_at;
+        poll.is_closed = false;
+        poll.created_at = now;
+
+        msg!("Poll {} created: {} options, ends at {}", poll_id, num_options, ends_at);
+        Ok(())
+    }
+
+    pub fn vote_poll(
+        ctx: Context<VotePoll>,
+        _poll_id: u64,
+        choice: u8,
+    ) -> Result<()> {
+        let poll_key = ctx.accounts.poll.key();
+        let voter = ctx.accounts.voter_profile.owner;
+        let poll = &mut ctx.accounts.poll;
+        let now = Clock::get()?.unix_timestamp;
+
+        // Check poll is still active
+        require!(!poll.is_closed, ShadowError::PollAlreadyEnded);
+        require!(now < poll.ends_at, ShadowError::PollAlreadyEnded);
+        require!(choice < poll.num_options, ShadowError::InvalidPollChoice);
+
+        // Record the vote (PDA uniqueness via init prevents double-voting)
+        let vote = &mut ctx.accounts.poll_vote;
+
+        vote.poll = poll_key;
+        vote.voter = voter;
+        vote.choice = choice;
+        vote.voted_at = now;
+
+        // Increment vote count
+        match choice {
+            0 => poll.votes_a += 1,
+            1 => poll.votes_b += 1,
+            2 => poll.votes_c += 1,
+            3 => poll.votes_d += 1,
+            _ => return Err(ShadowError::InvalidPollChoice.into()),
+        }
+        poll.total_votes += 1;
+
+        msg!("Vote cast on poll {}: option {}, total votes {}", poll.poll_id, choice, poll.total_votes);
+        Ok(())
+    }
+
+    pub fn close_poll(ctx: Context<ClosePoll>, _poll_id: u64) -> Result<()> {
+        let poll = &mut ctx.accounts.poll;
+        poll.is_closed = true;
+        msg!("Poll {} closed by creator. Final votes: A={} B={} C={} D={} total={}",
+            poll.poll_id, poll.votes_a, poll.votes_b, poll.votes_c, poll.votes_d, poll.total_votes);
         Ok(())
     }
 
@@ -705,6 +800,68 @@ pub struct AdminForceClose<'info> {
     pub authority: Signer<'info>,
 }
 
+// ========== POLL CONTEXTS ==========
+
+#[derive(Accounts)]
+#[instruction(poll_id: u64)]
+pub struct CreatePoll<'info> {
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + Poll::LEN,
+        seeds = [POLL_SEED, profile.owner.as_ref(), &poll_id.to_le_bytes()],
+        bump
+    )]
+    pub poll: Account<'info, Poll>,
+    #[account(mut, seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
+    pub profile: Account<'info, Profile>,
+    #[account(mut, constraint = user.key() == profile.owner @ ShadowError::Unauthorized)]
+    pub user: Signer<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(poll_id: u64)]
+pub struct VotePoll<'info> {
+    #[account(
+        mut,
+        seeds = [POLL_SEED, poll.creator.as_ref(), &poll_id.to_le_bytes()],
+        bump
+    )]
+    pub poll: Account<'info, Poll>,
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + PollVote::LEN,
+        seeds = [POLL_VOTE_SEED, poll.key().as_ref(), voter_profile.owner.as_ref()],
+        bump
+    )]
+    pub poll_vote: Account<'info, PollVote>,
+    #[account(seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
+    pub voter_profile: Account<'info, Profile>,
+    #[account(mut, constraint = user.key() == voter_profile.owner @ ShadowError::Unauthorized)]
+    pub user: Signer<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(poll_id: u64)]
+pub struct ClosePoll<'info> {
+    #[account(
+        mut,
+        seeds = [POLL_SEED, poll.creator.as_ref(), &poll_id.to_le_bytes()],
+        bump,
+        constraint = poll.creator == user.key() @ ShadowError::Unauthorized
+    )]
+    pub poll: Account<'info, Poll>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
 // ========== DATA ACCOUNTS ==========
 
 #[account]
@@ -838,6 +995,44 @@ impl Membership {
     pub const LEN: usize = 32 + 32 + 8;
 }
 
+#[account]
+pub struct Poll {
+    pub creator: Pubkey,        // 32
+    pub poll_id: u64,           // 8
+    pub question: String,       // 4 + 200
+    pub option_a: String,       // 4 + 50
+    pub option_b: String,       // 4 + 50
+    pub option_c: String,       // 4 + 50
+    pub option_d: String,       // 4 + 50
+    pub num_options: u8,        // 1
+    pub votes_a: u32,           // 4
+    pub votes_b: u32,           // 4
+    pub votes_c: u32,           // 4
+    pub votes_d: u32,           // 4
+    pub total_votes: u32,       // 4
+    pub ends_at: i64,           // 8
+    pub is_closed: bool,        // 1
+    pub created_at: i64,        // 8
+}
+
+impl Poll {
+    // 32 + 8 + (4+200) + (4+50)*4 + 1 + 4*4 + 4 + 8 + 1 + 8
+    pub const LEN: usize = 32 + 8 + 204 + 54 + 54 + 54 + 54 + 1 + 4 + 4 + 4 + 4 + 4 + 8 + 1 + 8;
+}
+
+#[account]
+pub struct PollVote {
+    pub poll: Pubkey,           // 32
+    pub voter: Pubkey,          // 32
+    pub choice: u8,             // 1
+    pub voted_at: i64,          // 8
+}
+
+impl PollVote {
+    // 32 + 32 + 1 + 8
+    pub const LEN: usize = 32 + 32 + 1 + 8;
+}
+
 // ========== ERRORS ==========
 
 #[error_code]
@@ -858,4 +1053,10 @@ pub enum ShadowError {
     CommunityFull,
     #[msg("Account already initialized")]
     AlreadyInitialized,
+    #[msg("Poll must have 2-4 options")]
+    InvalidPollOptions,
+    #[msg("Invalid poll choice")]
+    InvalidPollChoice,
+    #[msg("Poll has ended")]
+    PollAlreadyEnded,
 }

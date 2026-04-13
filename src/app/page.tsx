@@ -13,6 +13,7 @@ import CreatorDashboard from "@/components/CreatorDashboard";
 import Friends from "@/components/Friends";
 import Tokens from "@/components/Tokens";
 import Communities from "@/components/Communities";
+import TrendingSidebar from "@/components/TrendingSidebar";
 import ToastContainer from "@/components/Toast";
 import Landing from "@/components/Landing";
 import OnboardingDemo from "@/components/OnboardingDemo";
@@ -104,7 +105,16 @@ export default function Home() {
       <div className="md:ml-64 h-screen flex flex-col bg-[#FAFBFC] overflow-hidden">
         <Header />
         <main className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-4 sm:py-4 md:p-6 pb-[80px] md:pb-6 pt-0">
-          {activeTab === "feed" && <Feed />}
+          {activeTab === "feed" && (
+            <div className="flex gap-6 max-w-5xl mx-auto">
+              <div className="flex-1 min-w-0">
+                <Feed />
+              </div>
+              <div className="hidden lg:block sticky top-0 self-start pt-0">
+                <TrendingSidebar />
+              </div>
+            </div>
+          )}
           {activeTab === "chat" && <Chat />}
           {activeTab === "friends" && <Friends />}
           {activeTab === "tokens" && <Tokens />}

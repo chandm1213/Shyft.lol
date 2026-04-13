@@ -49,6 +49,8 @@ const COMMENT_SEED = Buffer.from("comment");
 const REACTION_SEED = Buffer.from("reaction");
 const COMMUNITY_SEED = Buffer.from("community");
 const MEMBERSHIP_SEED = Buffer.from("membership");
+const POLL_SEED = Buffer.from("poll");
+const POLL_VOTE_SEED = Buffer.from("poll_vote");
 
 // ========== Simple In-Memory Cache ==========
 
@@ -215,6 +217,14 @@ function getCommunityPda(communityId: number): [PublicKey, number] {
 
 function getMembershipPda(communityPda: PublicKey, member: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([MEMBERSHIP_SEED, communityPda.toBuffer(), member.toBuffer()], PROGRAM_ID);
+}
+
+function getPollPda(creator: PublicKey, pollId: number): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([POLL_SEED, creator.toBuffer(), toLEBytes(pollId)], PROGRAM_ID);
+}
+
+function getPollVotePda(pollPda: PublicKey, voter: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([POLL_VOTE_SEED, pollPda.toBuffer(), voter.toBuffer()], PROGRAM_ID);
 }
 
 export class ShyftClient {
@@ -1195,6 +1205,119 @@ export class ShyftClient {
       return false;
     }
   }
+
+  // ========== POLLS ==========
+
+  async createPoll(
+    pollId: number,
+    question: string,
+    options: string[],
+    endsAt: number // unix timestamp (seconds)
+  ): Promise<string> {
+    if (options.length < 2 || options.length > 4) throw new Error("Polls must have 2-4 options");
+    const optionA = options[0] || "";
+    const optionB = options[1] || "";
+    const optionC = options[2] || "";
+    const optionD = options[3] || "";
+    const sig = await requestServerTx(
+      "createPoll",
+      { pollId, question, optionA, optionB, optionC, optionD, numOptions: options.length, endsAt },
+      this.provider.wallet,
+      this.provider.connection
+    );
+    rpcCache.invalidate("allPolls");
+    return sig;
+  }
+
+  async votePoll(pollCreator: PublicKey, pollId: number, choice: number): Promise<string> {
+    const sig = await requestServerTx(
+      "votePoll",
+      { pollCreator: pollCreator.toBase58(), pollId, choice },
+      this.provider.wallet,
+      this.provider.connection
+    );
+    rpcCache.invalidate("allPolls");
+    rpcCache.invalidate("allPollVotes");
+    return sig;
+  }
+
+  async closePoll(pollId: number): Promise<string> {
+    const sig = await requestServerTx(
+      "closePoll",
+      { pollId },
+      this.provider.wallet,
+      this.provider.connection
+    );
+    rpcCache.invalidate("allPolls");
+    return sig;
+  }
+
+  async getAllPolls(): Promise<any[]> {
+    const cacheKey = "allPolls";
+    const cached = rpcCache.get<any[]>(cacheKey);
+    if (cached) return cached;
+    try {
+      const all = await this.accounts.poll.all();
+      const result = all.map((a: any) => ({
+        pubkey: a.publicKey.toBase58(),
+        creator: a.account.creator.toBase58(),
+        pollId: Number(a.account.pollId),
+        question: a.account.question,
+        optionA: a.account.optionA,
+        optionB: a.account.optionB,
+        optionC: a.account.optionC,
+        optionD: a.account.optionD,
+        numOptions: a.account.numOptions,
+        votesA: a.account.votesA,
+        votesB: a.account.votesB,
+        votesC: a.account.votesC,
+        votesD: a.account.votesD,
+        totalVotes: a.account.totalVotes,
+        endsAt: Number(a.account.endsAt) * 1000,
+        isClosed: a.account.isClosed,
+        createdAt: Number(a.account.createdAt) * 1000,
+      })).sort((a: any, b: any) => b.createdAt - a.createdAt);
+      rpcCache.set(cacheKey, result);
+      return result;
+    } catch (err) {
+      console.error("getAllPolls error:", err);
+      return [];
+    }
+  }
+
+  async getPollVotes(pollPubkey?: PublicKey): Promise<any[]> {
+    const cacheKey = pollPubkey ? `pollVotes_${pollPubkey.toBase58()}` : "allPollVotes";
+    const cached = rpcCache.get<any[]>(cacheKey);
+    if (cached) return cached;
+    try {
+      const all = await this.accounts.pollVote.all();
+      let result = all.map((a: any) => ({
+        poll: a.account.poll.toBase58(),
+        voter: a.account.voter.toBase58(),
+        choice: a.account.choice,
+        votedAt: Number(a.account.votedAt) * 1000,
+      }));
+      if (pollPubkey) {
+        result = result.filter((v: any) => v.poll === pollPubkey.toBase58());
+      }
+      rpcCache.set(cacheKey, result);
+      return result;
+    } catch (err) {
+      console.error("getPollVotes error:", err);
+      return [];
+    }
+  }
+
+  async hasVoted(pollPda: PublicKey, userPubkey?: PublicKey): Promise<{ voted: boolean; choice?: number }> {
+    const user = userPubkey || this.provider.wallet.publicKey;
+    const [votePda] = getPollVotePda(pollPda, user);
+    try {
+      const vote = await this.accounts.pollVote.fetch(votePda);
+      return { voted: true, choice: vote.choice };
+    } catch {
+      return { voted: false };
+    }
+  }
 }
 
 /** Derive a deterministic chat ID from two public keys.
@@ -1220,6 +1343,8 @@ export {
   getFollowPda,
   getCommunityPda,
   getMembershipPda,
+  getPollPda,
+  getPollVotePda,
   toLEBytes,
   PROGRAM_ID,
 };

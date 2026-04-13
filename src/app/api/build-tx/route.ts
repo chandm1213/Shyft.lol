@@ -36,6 +36,8 @@ const COMMENT_SEED = Buffer.from("comment");
 const REACTION_SEED = Buffer.from("reaction");
 const COMMUNITY_SEED = Buffer.from("community");
 const MEMBERSHIP_SEED = Buffer.from("membership");
+const POLL_SEED = Buffer.from("poll");
+const POLL_VOTE_SEED = Buffer.from("poll_vote");
 
 function toLEBytes(num: number): Uint8Array {
   const buffer = new ArrayBuffer(8);
@@ -71,6 +73,12 @@ function getCommunityPda(communityId: number): [PublicKey, number] {
 }
 function getMembershipPda(communityPda: PublicKey, member: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([MEMBERSHIP_SEED, communityPda.toBuffer(), member.toBuffer()], PROGRAM_ID);
+}
+function getPollPda(creator: PublicKey, pollId: number): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([POLL_SEED, creator.toBuffer(), toLEBytes(pollId)], PROGRAM_ID);
+}
+function getPollVotePda(pollPda: PublicKey, voter: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([POLL_VOTE_SEED, pollPda.toBuffer(), voter.toBuffer()], PROGRAM_ID);
 }
 
 // ========== Treasury ==========
@@ -418,6 +426,52 @@ const actions: Record<string, ActionHandler> = {
     return program.methods
       .updateCommunity(new BN(communityId), description || "", avatarUrl || "")
       .accounts({ community: communityPda, user })
+      .instruction();
+  },
+
+  // ── POLLS ──
+  async createPoll(params, user, treasury, program) {
+    const { pollId, question, optionA, optionB, optionC, optionD, numOptions, endsAt } = params;
+    if (pollId === undefined || !question || numOptions === undefined || endsAt === undefined) throw new Error("Missing params");
+    // Server-side validation to avoid wasting treasury SOL on txs the program will reject
+    const n = Number(numOptions);
+    if (!Number.isInteger(n) || n < 2 || n > 4) throw new Error("numOptions must be 2-4");
+    if (typeof question !== "string" || question.length > 200) throw new Error("Question too long (max 200)");
+    if ((optionA || "").length > 50 || (optionB || "").length > 50 || (optionC || "").length > 50 || (optionD || "").length > 50) throw new Error("Option too long (max 50)");
+    const now = Math.floor(Date.now() / 1000);
+    const ea = Number(endsAt);
+    if (!Number.isFinite(ea) || ea <= now) throw new Error("endsAt must be in the future");
+    if (ea > now + 30 * 24 * 60 * 60) throw new Error("Poll cannot last more than 30 days");
+    const [profilePda] = getProfilePda(user);
+    const [pollPda] = getPollPda(user, pollId);
+    return program.methods
+      .createPoll(new BN(pollId), question, optionA || "", optionB || "", optionC || "", optionD || "", numOptions, new BN(endsAt))
+      .accountsPartial({ poll: pollPda, profile: profilePda, user, payer: treasury, systemProgram: SystemProgram.programId })
+      .instruction();
+  },
+
+  async votePoll(params, user, treasury, program) {
+    const { pollCreator, pollId, choice } = params;
+    if (!pollCreator || pollId === undefined || choice === undefined) throw new Error("Missing params");
+    const c = Number(choice);
+    if (!Number.isInteger(c) || c < 0 || c > 3) throw new Error("Invalid choice (must be 0-3)");
+    const creatorPk = new PublicKey(pollCreator);
+    const [pollPda] = getPollPda(creatorPk, pollId);
+    const [pollVotePda] = getPollVotePda(pollPda, user);
+    const [voterProfilePda] = getProfilePda(user);
+    return program.methods
+      .votePoll(new BN(pollId), choice)
+      .accountsPartial({ poll: pollPda, pollVote: pollVotePda, voterProfile: voterProfilePda, user, payer: treasury, systemProgram: SystemProgram.programId })
+      .instruction();
+  },
+
+  async closePoll(params, user, treasury, program) {
+    const { pollId } = params;
+    if (pollId === undefined) throw new Error("Missing pollId");
+    const [pollPda] = getPollPda(user, pollId);
+    return program.methods
+      .closePoll(new BN(pollId))
+      .accountsPartial({ poll: pollPda, user })
       .instruction();
   },
 };
