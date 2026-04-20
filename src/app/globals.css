@@ -239,6 +239,33 @@
 [data-theme="dark"] .from-\[\#F8FAFC\] { --tw-gradient-from: #000000 !important; }
 [data-theme="dark"] .to-\[\#EFF6FF\] { --tw-gradient-to: #000000 !important; }
 
+/* Trending / Who to Follow section header gradients */
+[data-theme="dark"] .from-orange-50 { --tw-gradient-from: rgba(249, 115, 22, 0.1) !important; }
+[data-theme="dark"] .to-amber-50 { --tw-gradient-to: rgba(245, 158, 11, 0.1) !important; }
+[data-theme="dark"] .from-blue-50 { --tw-gradient-from: rgba(59, 130, 246, 0.1) !important; }
+[data-theme="dark"] .to-indigo-50 { --tw-gradient-to: rgba(99, 102, 241, 0.1) !important; }
+[data-theme="dark"] .from-amber-50 { --tw-gradient-from: rgba(245, 158, 11, 0.1) !important; }
+[data-theme="dark"] .to-orange-50 { --tw-gradient-to: rgba(249, 115, 22, 0.1) !important; }
+
+/* Poll progress bars & option backgrounds */
+[data-theme="dark"] .bg-purple-50\/50 { background-color: rgba(168, 85, 247, 0.15) !important; }
+[data-theme="dark"] .bg-purple-50\/30 { background-color: rgba(168, 85, 247, 0.08) !important; }
+[data-theme="dark"] .bg-purple-100\/80 { background-color: rgba(168, 85, 247, 0.25) !important; }
+[data-theme="dark"] .bg-\[\#F1F5F9\]\/80 { background-color: rgba(255, 255, 255, 0.08) !important; }
+
+/* Purple text in polls for dark mode */
+[data-theme="dark"] .text-purple-700 { color: #C084FC !important; }
+[data-theme="dark"] .text-purple-600 { color: #A78BFA !important; }
+[data-theme="dark"] .text-purple-500 { color: #A78BFA !important; }
+[data-theme="dark"] .border-purple-300 { border-color: rgba(168, 85, 247, 0.4) !important; }
+
+/* Section header border in dark */
+[data-theme="dark"] .border-\[\#F1F5F9\] { border-color: #2F3336 !important; }
+
+/* Amber/emerald text for dark readability */
+[data-theme="dark"] .text-amber-600 { color: #FBBF24 !important; }
+[data-theme="dark"] .text-orange-500 { color: #FB923C !important; }
+
 /* ─── Input / Textarea dark ─── */
 [data-theme="dark"] input,
 [data-theme="dark"] textarea,
