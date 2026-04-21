@@ -13,6 +13,7 @@ pub const COMMUNITY_SEED: &[u8] = b"community";
 pub const MEMBERSHIP_SEED: &[u8] = b"membership";
 pub const POLL_SEED: &[u8] = b"poll";
 pub const POLL_VOTE_SEED: &[u8] = b"poll_vote";
+pub const LIKE_SEED: &[u8] = b"like";
 
 /// Hardcoded treasury wallet — ALL rent refunds MUST go here.
 pub const TREASURY_PUBKEY: Pubkey = pubkey!("4tpjCdXS1fKiYoBYLvTNNyHwzTAhuigB3TY6Wd2QbxT9");
@@ -104,9 +105,17 @@ pub mod shadowspace {
     }
 
     pub fn like_post(ctx: Context<LikePost>, _post_id: u64) -> Result<()> {
+        // Prevent self-liking
+        require!(ctx.accounts.user.key() != ctx.accounts.post.author, ShadowError::CannotLikeOwnPost);
+        // Record the like — PDA uniqueness via `init` prevents double-liking
+        let like_record = &mut ctx.accounts.like_record;
+        like_record.post = ctx.accounts.post.key();
+        like_record.liker = ctx.accounts.user.key();
+        like_record.liked_at = Clock::get()?.unix_timestamp;
+
         let post = &mut ctx.accounts.post;
         post.likes += 1;
-        msg!("Post {} liked, total: {}", post.post_id, post.likes);
+        msg!("Post {} liked by {}, total: {}", post.post_id, like_record.liker, post.likes);
         Ok(())
     }
 
@@ -136,9 +145,9 @@ pub mod shadowspace {
         _post_id: u64,
         reaction_type: u8,
     ) -> Result<()> {
+        // Validate reaction_type is within allowed range (0-5 = 6 reactions)
+        require!(reaction_type <= 5, ShadowError::InvalidReactionType);
         let reaction = &mut ctx.accounts.reaction;
-        // Prevent re-initialization — post field is zero only on fresh accounts
-        require!(reaction.post == Pubkey::default(), ShadowError::AlreadyInitialized);
         reaction.post = ctx.accounts.post.key();
         reaction.user = ctx.accounts.reactor_profile.owner;
         reaction.reaction_type = reaction_type;
@@ -150,8 +159,10 @@ pub mod shadowspace {
 
     pub fn create_chat(ctx: Context<CreateChat>, chat_id: u64) -> Result<()> {
         let chat = &mut ctx.accounts.chat;
-        // Prevent re-initialization — don't let anyone hijack existing chats
+        // Prevent re-initialization
         require!(chat.created_at == 0, ShadowError::AlreadyInitialized);
+        // Both participants must be different wallets
+        require!(ctx.accounts.user1.key() != ctx.accounts.user2.key(), ShadowError::CannotFollowSelf);
         chat.chat_id = chat_id;
         chat.user1 = ctx.accounts.user1.key();
         chat.user2 = ctx.accounts.user2.key();
@@ -504,9 +515,19 @@ pub struct LikePost<'info> {
     pub post: Account<'info, Post>,
     #[account(seeds = [PROFILE_SEED, profile.owner.as_ref()], bump)]
     pub profile: Account<'info, Profile>,
+    /// One LikeRecord PDA per (post, liker) — init will fail if they've already liked
+    #[account(
+        init,
+        payer = user,
+        space = 8 + LikeRecord::LEN,
+        seeds = [LIKE_SEED, post.key().as_ref(), user.key().as_ref()],
+        bump
+    )]
+    pub like_record: Account<'info, LikeRecord>,
     /// The liker — must be the profile owner
-    #[account(constraint = user.key() == profile.owner @ ShadowError::Unauthorized)]
+    #[account(mut, constraint = user.key() == profile.owner @ ShadowError::Unauthorized)]
     pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -529,7 +550,7 @@ pub struct CreateComment<'info> {
 #[derive(Accounts)]
 #[instruction(post_id: u64)]
 pub struct ReactToPost<'info> {
-    #[account(init_if_needed, payer = payer, space = 8 + Reaction::LEN, seeds = [REACTION_SEED, post.key().as_ref(), reactor_profile.owner.as_ref()], bump)]
+    #[account(init, payer = payer, space = 8 + Reaction::LEN, seeds = [REACTION_SEED, post.key().as_ref(), reactor_profile.owner.as_ref()], bump)]
     pub reaction: Account<'info, Reaction>,
     #[account(seeds = [POST_SEED, post.author.as_ref(), &post_id.to_le_bytes()], bump)]
     pub post: Account<'info, Post>,
@@ -661,7 +682,8 @@ pub struct LeaveCommunity<'info> {
     pub community: Account<'info, Community>,
     #[account(seeds = [PROFILE_SEED, user.key().as_ref()], bump)]
     pub member_profile: Account<'info, Profile>,
-    #[account(mut)]
+    /// Must be the profile owner — prevents others from kicking members
+    #[account(mut, constraint = user.key() == member_profile.owner @ ShadowError::Unauthorized)]
     pub user: Signer<'info>,
     /// CHECK: Verified via constraint
     #[account(mut, constraint = treasury.key() == TREASURY_PUBKEY @ ShadowError::Unauthorized)]
@@ -762,9 +784,10 @@ pub struct CloseReaction<'info> {
 #[derive(Accounts)]
 #[instruction(chat_id: u64)]
 pub struct CloseChat<'info> {
-    #[account(mut, close = treasury, seeds = [CHAT_SEED, &chat_id.to_le_bytes()], bump)]
+    #[account(mut, close = treasury, seeds = [CHAT_SEED, &chat_id.to_le_bytes()], bump,
+        constraint = (user.key() == chat.user1 || user.key() == chat.user2) @ ShadowError::Unauthorized)]
     pub chat: Account<'info, Chat>,
-    #[account(mut, constraint = user.key() == chat.user1 @ ShadowError::Unauthorized)]
+    #[account(mut)]
     pub user: Signer<'info>,
     /// Treasury wallet — rent refund destination
     /// CHECK: Verified via constraint
@@ -1033,6 +1056,18 @@ impl PollVote {
     pub const LEN: usize = 32 + 32 + 1 + 8;
 }
 
+#[account]
+pub struct LikeRecord {
+    pub post: Pubkey,    // 32 — which post was liked
+    pub liker: Pubkey,   // 32 — who liked it
+    pub liked_at: i64,   // 8  — timestamp
+}
+
+impl LikeRecord {
+    // 32 + 32 + 8
+    pub const LEN: usize = 32 + 32 + 8;
+}
+
 // ========== ERRORS ==========
 
 #[error_code]
@@ -1059,4 +1094,10 @@ pub enum ShadowError {
     InvalidPollChoice,
     #[msg("Poll has ended")]
     PollAlreadyEnded,
+    #[msg("Already liked this post")]
+    AlreadyLiked,
+    #[msg("Cannot like your own post")]
+    CannotLikeOwnPost,
+    #[msg("Invalid reaction type")]
+    InvalidReactionType,
 }

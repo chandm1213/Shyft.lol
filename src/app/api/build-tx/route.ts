@@ -38,6 +38,7 @@ const COMMUNITY_SEED = Buffer.from("community");
 const MEMBERSHIP_SEED = Buffer.from("membership");
 const POLL_SEED = Buffer.from("poll");
 const POLL_VOTE_SEED = Buffer.from("poll_vote");
+const LIKE_SEED = Buffer.from("like");
 
 function toLEBytes(num: number): Uint8Array {
   const buffer = new ArrayBuffer(8);
@@ -52,6 +53,9 @@ function getProfilePda(owner: PublicKey): [PublicKey, number] {
 }
 function getPostPda(author: PublicKey, postId: number): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([POST_SEED, author.toBuffer(), toLEBytes(postId)], PROGRAM_ID);
+}
+function getLikeRecordPda(postPda: PublicKey, liker: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([LIKE_SEED, postPda.toBuffer(), liker.toBuffer()], PROGRAM_ID);
 }
 function getChatPda(chatId: number): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([CHAT_SEED, toLEBytes(chatId)], PROGRAM_ID);
@@ -246,9 +250,10 @@ const actions: Record<string, ActionHandler> = {
     const authorPk = new PublicKey(author);
     const [postPda] = getPostPda(authorPk, postId);
     const [profilePda] = getProfilePda(user);
+    const [likeRecordPda] = getLikeRecordPda(postPda, user);
     return program.methods
       .likePost(new BN(postId))
-      .accountsPartial({ post: postPda, profile: profilePda, user })
+      .accountsPartial({ post: postPda, profile: profilePda, likeRecord: likeRecordPda, user, systemProgram: SystemProgram.programId })
       .instruction();
   },
 
