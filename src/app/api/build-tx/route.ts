@@ -505,17 +505,32 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, params, walletAddress } = body;
+    const { action, params, walletAddress, actions: batchActions } = body;
 
-    if (!action || !walletAddress) {
-      return NextResponse.json({ error: "Missing action or walletAddress" }, { status: 400 });
+    if (!walletAddress) {
+      return NextResponse.json({ error: "Missing walletAddress" }, { status: 400 });
     }
 
-    // ── 2. VALIDATE ACTION EXISTS ──
-    const handler = actions[action];
-    if (!handler) {
-      console.error(`🚨 BLOCKED: Unknown action "${action}" from ${walletAddress}`);
-      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    const requestedActions = Array.isArray(batchActions)
+      ? batchActions
+      : [{ action, params }];
+
+    if (!requestedActions.length) {
+      return NextResponse.json({ error: "No actions provided" }, { status: 400 });
+    }
+
+    if (requestedActions.length > 5) {
+      return NextResponse.json({ error: "Too many actions in one batch" }, { status: 400 });
+    }
+
+    for (const requested of requestedActions) {
+      if (!requested?.action || typeof requested.action !== "string") {
+        return NextResponse.json({ error: "Invalid action payload" }, { status: 400 });
+      }
+      if (!actions[requested.action]) {
+        console.error(`🚨 BLOCKED: Unknown action "${requested.action}" from ${walletAddress}`);
+        return NextResponse.json({ error: `Unknown action: ${requested.action}` }, { status: 400 });
+      }
     }
 
     let userPubkey: PublicKey;
@@ -553,18 +568,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Platform treasury low" }, { status: 503 });
     }
 
-    // ── 5. BUILD THE INSTRUCTION — server controls everything ──
+    // ── 5. BUILD INSTRUCTION(S) — server controls everything ──
     const program = getProgram(connection, treasury);
-    let ix;
-    try {
-      ix = await handler(params || {}, userPubkey, treasury.publicKey, program);
-    } catch (err: any) {
-      console.error(`❌ Build failed for action "${action}":`, err?.message);
-      return NextResponse.json({ error: err?.message || "Failed to build instruction" }, { status: 400 });
+    const ixs: any[] = [];
+    for (const requested of requestedActions) {
+      const handler = actions[requested.action];
+      try {
+        const ix = await handler(requested.params || {}, userPubkey, treasury.publicKey, program);
+        ixs.push(ix);
+      } catch (err: any) {
+        console.error(`❌ Build failed for action "${requested.action}":`, err?.message);
+        return NextResponse.json({ error: err?.message || `Failed to build instruction: ${requested.action}` }, { status: 400 });
+      }
     }
 
     // ── 6. BUILD TX ──
-    const tx = new Transaction().add(ix);
+    const tx = new Transaction();
+    for (const ix of ixs) tx.add(ix);
     tx.feePayer = treasury.publicKey;
 
     // ── 7. FRESH BLOCKHASH ──
@@ -577,7 +597,8 @@ export async function POST(request: NextRequest) {
     // ── 9. RETURN partially-signed tx ──
     const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
 
-    console.log(`🔨 Built "${action}" for ${walletAddress.slice(0, 8)}.. | IP: ${clientIp}`);
+    const actionSummary = requestedActions.map((requested: any) => requested.action).join(",");
+    console.log(`🔨 Built "${actionSummary}" for ${walletAddress.slice(0, 8)}.. | IP: ${clientIp}`);
     return NextResponse.json({
       success: true,
       transaction: serialized.toString("base64"),

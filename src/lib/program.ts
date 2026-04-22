@@ -140,31 +140,135 @@ export async function requestServerTx(
   connection: Connection
 ): Promise<string> {
   const walletAddress = wallet.publicKey.toBase58();
-  console.log(`📋 build-tx: action="${action}" wallet=${walletAddress.slice(0, 8)}..`);
+  if (BATCHABLE_ACTIONS.has(action)) {
+    return enqueueBatchedSocialTx(action, params, walletAddress, wallet, connection);
+  }
+  return buildSignAndSendTx({ action, params, walletAddress }, wallet, connection, action);
+}
 
-  // Step 1: Ask server to build + treasury-sign the tx
+const BATCHABLE_ACTIONS = new Set(["likePost", "reactToPost", "followUser", "unfollowUser"]);
+const SOCIAL_BATCH_WINDOW_MS = 600;
+const SOCIAL_BATCH_MAX_ACTIONS = 4;
+
+type PendingSocialItem = {
+  action: string;
+  params: Record<string, any>;
+  resolve: (signature: string) => void;
+  reject: (error: Error) => void;
+};
+
+type PendingSocialBatch = {
+  walletAddress: string;
+  wallet: { signTransaction(tx: Transaction): Promise<Transaction>; publicKey: PublicKey };
+  connection: Connection;
+  items: PendingSocialItem[];
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
+const pendingSocialBatches = new Map<string, PendingSocialBatch>();
+
+async function buildSignAndSendTx(
+  payload: Record<string, any>,
+  wallet: { signTransaction(tx: Transaction): Promise<Transaction>; publicKey: PublicKey },
+  connection: Connection,
+  debugLabel: string
+): Promise<string> {
+  const walletAddress = wallet.publicKey.toBase58();
+  console.log(`📋 build-tx: action="${debugLabel}" wallet=${walletAddress.slice(0, 8)}..`);
+
   const res = await fetch("/api/build-tx", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, params, walletAddress }),
+    body: JSON.stringify(payload),
   });
   const data = await res.json();
   if (!data.success) {
-    console.error(`❌ build-tx failed for "${action}":`, data.error);
+    console.error(`❌ build-tx failed for "${debugLabel}":`, data.error);
     throw new Error(data.error || "Build transaction failed");
   }
 
-  // Step 2: Deserialize the treasury-signed tx
   const treasurySigned = Transaction.from(Buffer.from(data.transaction, "base64"));
-
-  // Step 3: User co-signs (wallet popup)
   const fullySigned = await wallet.signTransaction(treasurySigned);
-
-  // Step 4: Send directly to Solana
   const sig = await connection.sendRawTransaction(fullySigned.serialize());
-  console.log(`✅ "${action}" sent to Solana:`, sig.slice(0, 16) + "...");
-
+  console.log(`✅ "${debugLabel}" sent to Solana:`, sig.slice(0, 16) + "...");
   return sig;
+}
+
+function enqueueBatchedSocialTx(
+  action: string,
+  params: Record<string, any>,
+  walletAddress: string,
+  wallet: { signTransaction(tx: Transaction): Promise<Transaction>; publicKey: PublicKey },
+  connection: Connection
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let batch = pendingSocialBatches.get(walletAddress);
+    if (!batch) {
+      batch = {
+        walletAddress,
+        wallet,
+        connection,
+        items: [],
+        timer: null,
+      };
+      pendingSocialBatches.set(walletAddress, batch);
+    }
+
+    batch.items.push({ action, params, resolve, reject });
+
+    if (batch.items.length >= SOCIAL_BATCH_MAX_ACTIONS) {
+      if (batch.timer) {
+        clearTimeout(batch.timer);
+        batch.timer = null;
+      }
+      void flushBatchedSocialTx(walletAddress);
+      return;
+    }
+
+    if (!batch.timer) {
+      batch.timer = setTimeout(() => {
+        void flushBatchedSocialTx(walletAddress);
+      }, SOCIAL_BATCH_WINDOW_MS);
+    }
+  });
+}
+
+async function flushBatchedSocialTx(walletAddress: string): Promise<void> {
+  const batch = pendingSocialBatches.get(walletAddress);
+  if (!batch) return;
+
+  pendingSocialBatches.delete(walletAddress);
+  if (batch.timer) {
+    clearTimeout(batch.timer);
+    batch.timer = null;
+  }
+
+  const items = batch.items;
+  if (items.length === 0) return;
+
+  try {
+    const signature = items.length === 1
+      ? await buildSignAndSendTx(
+          { action: items[0].action, params: items[0].params, walletAddress },
+          batch.wallet,
+          batch.connection,
+          items[0].action
+        )
+      : await buildSignAndSendTx(
+          {
+            walletAddress,
+            actions: items.map((item) => ({ action: item.action, params: item.params })),
+          },
+          batch.wallet,
+          batch.connection,
+          `batch:${items.map((item) => item.action).join(",")}`
+        );
+
+    for (const item of items) item.resolve(signature);
+  } catch (err: any) {
+    const error = err instanceof Error ? err : new Error(err?.message || "Batched transaction failed");
+    for (const item of items) item.reject(error);
+  }
 }
 
 // ========== Helpers ==========

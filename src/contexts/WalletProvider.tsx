@@ -48,6 +48,9 @@ export default function WalletProvider({ children }: { children: React.ReactNode
           solana: {
             createOnLogin: "users-without-wallets",
           },
+          // Disable the Privy confirmation modal for all embedded wallet actions
+          // — matches the mobile app behaviour where signing is silent/background
+          showWalletUIs: false,
         },
         externalWallets: {
           solana: {
