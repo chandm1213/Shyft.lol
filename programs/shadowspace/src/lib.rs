@@ -105,8 +105,6 @@ pub mod shadowspace {
     }
 
     pub fn like_post(ctx: Context<LikePost>, _post_id: u64) -> Result<()> {
-        // Prevent self-liking
-        require!(ctx.accounts.user.key() != ctx.accounts.post.author, ShadowError::CannotLikeOwnPost);
         // Record the like — PDA uniqueness via `init` prevents double-liking
         let like_record = &mut ctx.accounts.like_record;
         like_record.post = ctx.accounts.post.key();
