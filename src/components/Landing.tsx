@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Shield, MessageCircle, Wallet, Lock, Users, ArrowRight, Zap, ChevronRight, Sparkles, Sun, Moon, Activity } from "lucide-react";
+import { Shield, MessageCircle, Wallet, Lock, Users, ArrowRight, Zap, ChevronRight, Sparkles, Sun, Moon, Activity, Smartphone, Globe } from "lucide-react";
 import { useWallet } from "@/hooks/usePrivyWallet";
 import { useAppStore } from "@/lib/store";
 
@@ -385,6 +385,95 @@ export default function Landing() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile App Showcase */}
+      <div className="px-4 sm:px-6 md:px-12 py-14 sm:py-20 border-t border-[#E2E8F0] bg-white">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-10 sm:gap-16 items-center">
+            {/* Text side */}
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-full mb-5">
+                <Smartphone className="w-3.5 h-3.5 text-purple-500" />
+                <span className="text-[11px] font-medium text-purple-600">Native iOS App</span>
+              </div>
+              <h3 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#1A1A2E] leading-tight mb-4">
+                Take your social<br />
+                <span className="bg-gradient-to-r from-[#7C3AED] to-[#2563EB] bg-clip-text text-transparent">on the go</span>
+              </h3>
+              <p className="text-sm sm:text-base text-[#64748B] leading-relaxed mb-6">
+                The full Shyft experience in a native iOS app. Post, chat, send payments — all from your phone with zero wallet popups. Embedded wallet signs silently in the background.
+              </p>
+              <div className="space-y-3 mb-8">
+                {[
+                  { icon: <Zap className="w-4 h-4 text-[#F59E0B]" />, bg: "bg-amber-50", text: "Silent transaction signing — no popups ever" },
+                  { icon: <Lock className="w-4 h-4 text-[#16A34A]" />, bg: "bg-green-50", text: "Same E2E encryption as the web app" },
+                  { icon: <Globe className="w-4 h-4 text-[#2563EB]" />, bg: "bg-blue-50", text: "Synced with web — one identity everywhere" },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg ${item.bg} flex items-center justify-center flex-shrink-0`}>{item.icon}</div>
+                    <p className="text-sm text-[#475569]">{item.text}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200">
+                <div className="w-2 h-2 rounded-full bg-[#F59E0B] animate-pulse" />
+                <span className="text-sm font-medium text-amber-700">Coming Soon · TestFlight</span>
+              </div>
+            </div>
+
+            {/* Phone mockup */}
+            <div className="flex items-center justify-center">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-200/40 to-blue-200/40 blur-3xl rounded-full scale-150" />
+                <div className="relative w-56 sm:w-64 bg-[#111] rounded-[3rem] border-2 border-[#333] shadow-2xl overflow-hidden" style={{ aspectRatio: '9/19.5' }}>
+                  <div className="absolute top-3 left-1/2 -translate-x-1/2 w-24 h-6 bg-[#111] rounded-full z-10 border border-[#333]" />
+                  <div className="absolute inset-0 bg-[#0d0d0d] flex flex-col pt-10 overflow-hidden">
+                    <div className="px-4 py-2.5 flex items-center justify-between border-b border-white/5">
+                      <div className="flex items-center gap-2">
+                        <img src="/shyftlogo.png" alt="" className="shyft-logo w-6 h-6 rounded-lg" style={{ filter: 'invert(1)' }} />
+                        <span className="text-white text-xs font-bold">Shyft</span>
+                      </div>
+                      <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px]">✏️</div>
+                    </div>
+                    <div className="flex-1 overflow-hidden px-3 py-2 space-y-2">
+                      {[
+                        { avatar: "🧑‍💻", name: "dev.sol", time: "2m", text: "just deployed my first Solana program 🚀", likes: 24 },
+                        { avatar: "👩‍🎨", name: "art3mis.sol", time: "8m", text: "new NFT drop live! check the link below 🎨", likes: 47 },
+                        { avatar: "🤝", name: "vc.sol", time: "15m", text: "looking for founders building on Solana DM me", likes: 11 },
+                      ].map((post, i) => (
+                        <div key={i} className="rounded-xl p-2.5 border border-white/5">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center text-xs">{post.avatar}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-semibold text-white truncate">{post.name}</span>
+                                <div className="w-2 h-2 rounded-full bg-[#60A5FA] flex-shrink-0" />
+                              </div>
+                              <span className="text-[8px] text-white/30">{post.time} ago</span>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-white/60 leading-snug">{post.text}</p>
+                          <div className="mt-1.5 flex items-center gap-2 text-[8px] text-white/20">
+                            <span>❤️ {post.likes}</span><span>💬</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-4 py-2 flex items-center justify-around border-t border-white/5">
+                      {["🏠", "🔍", "➕", "💬", "👤"].map((icon, i) => (
+                        <div key={i} className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm ${i === 0 ? "bg-white/10" : ""}`}>{icon}</div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="absolute -right-0.5 top-20 w-1 h-12 bg-[#333] rounded-r-full" />
+                <div className="absolute -left-0.5 top-16 w-1 h-8 bg-[#333] rounded-l-full" />
+                <div className="absolute -left-0.5 top-28 w-1 h-12 bg-[#333] rounded-l-full" />
+              </div>
             </div>
           </div>
         </div>
