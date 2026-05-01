@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2, Coins, TrendingUp, BarChart3, Clock, CheckCircle2 } from "lucide-react";
+import { Heart, MessageCircle, Share2, Repeat2, Globe, Send, Shield, RefreshCw, Image as ImageIcon, X, BadgeCheck, Trash2, Lock, Unlock, DollarSign, Loader2, Coins, TrendingUp, BarChart3, Clock, CheckCircle2, Pencil } from "lucide-react";
 
 // Gold badge for OG / founder accounts
 const GOLD_BADGE_USERNAMES = ["shaan", "shyft"];
@@ -108,6 +108,10 @@ export function OnChainPostCard({
   const [localLikeBoost, setLocalLikeBoost] = useState(0);
   const [reposting, setReposting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [localContent, setLocalContent] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState(false);
   const [showTip, setShowTip] = useState(false);
   const [tipping, setTipping] = useState(false);
@@ -290,12 +294,16 @@ export function OnChainPostCard({
       toast("success", "Liked! ❤️", "Recorded on-chain");
     } catch (err: any) {
       console.error("Like error:", err);
-      if (err?.message?.includes("User rejected") || err?.message?.includes("rejected the request")) {
+      const msg = err?.message || "";
+      if (msg.includes("already in use") || msg.includes("0x0")) {
+        // Already liked on-chain (e.g. liked from mobile) — silently mark as liked
+        addLikedPost(post.publicKey);
+      } else if (msg.includes("User rejected") || msg.includes("rejected the request")) {
         toast("error", "Like cancelled", "You rejected the transaction");
-      } else if (err?.message?.includes("insufficient") || err?.message?.includes("0x1")) {
+      } else if (msg.includes("insufficient") || msg.includes("0x1")) {
         toast("error", "Insufficient SOL", "Your wallet needs more SOL to interact.");
       } else {
-        toast("error", "Like failed", err?.message?.slice(0, 80) || "Please try again");
+        toast("error", "Like failed", msg.slice(0, 80) || "Please try again");
       }
     }
     setLiking(false);
@@ -418,11 +426,58 @@ export function OnChainPostCard({
         </ProfileHoverCard>
       </div>
 
+      {/* Inline edit modal */}
+      {editing && (
+        <div className="mb-3 pl-0 sm:pl-14">
+          <textarea
+            autoFocus
+            value={editText}
+            onChange={e => setEditText(e.target.value)}
+            maxLength={500}
+            rows={4}
+            className="w-full rounded-xl border border-[#2563EB] bg-[#F8FAFC] dark:bg-[#1E293B] text-[#0F172A] dark:text-white text-sm p-3 resize-none focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-xs text-[#94A3B8]">{editText.length}/500</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditing(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#64748B] hover:bg-[#F1F5F9] transition-all"
+              >Cancel</button>
+              <button
+                disabled={savingEdit || !editText.trim() || editText.trim() === (localContent ?? post.content)}
+                onClick={async () => {
+                  if (!program || !editText.trim()) return;
+                  setSavingEdit(true);
+                  try {
+                    await program.editPost(Number(post.postId), editText.trim());
+                    setLocalContent(editText.trim());
+                    setEditing(false);
+                    toast("success", "Post updated ✏️", "Edit saved on-chain");
+                  } catch (err: any) {
+                    if (err?.message?.includes("User rejected") || err?.message?.includes("rejected the request")) {
+                      toast("error", "Edit cancelled", "You rejected the transaction");
+                    } else {
+                      toast("error", "Edit failed", err?.message?.slice(0, 80) || "Please try again");
+                    }
+                  }
+                  setSavingEdit(false);
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#2563EB] text-white hover:bg-[#1D4ED8] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+              >
+                {savingEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       <div className="mb-3 pl-0 sm:pl-14">
         {(() => {
-          // Determine the content to render (use actualContent for paid posts that are unlocked)
-          const renderContent = isPaid && isUnlocked ? actualContent : post.content;
+          // Determine the content to render (use localContent if edited, actualContent for paid posts that are unlocked)
+          const renderContent = localContent ?? (isPaid && isUnlocked ? actualContent : post.content);
 
           // Paid post — locked state
           if (isPaid && !isUnlocked) {
@@ -768,6 +823,19 @@ export function OnChainPostCard({
         >
           <Share2 className="w-4 h-4" />
         </button>
+
+        {/* Edit (own posts only) */}
+        {isMe && !isPaid && (
+          <button
+            onClick={() => {
+              setEditText(localContent ?? post.content);
+              setEditing(true);
+            }}
+            className="touch-active flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#2563EB] hover:bg-[#EBF4FF] active:bg-[#EBF4FF] transition-all"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Delete (own posts only) */}
         {isMe && (
@@ -1229,13 +1297,17 @@ export default function Feed() {
     if (!program || !publicKey) return;
     setLoadingOnchain(true);
     try {
-      const [allMapped, profiles, comments, reactions, polls] = await Promise.all([
+      const [allMapped, profiles, comments, reactions, polls, myLikedPosts] = await Promise.all([
         program.getAllPosts(),
         program.getAllProfiles(),
         program.getAllComments(),
         program.getAllReactions(),
         program.getAllPolls(),
+        program.getLikedPostsByUser(publicKey),
       ]);
+
+      // Seed the liked posts store from on-chain data (catches cross-device likes e.g. from mobile)
+      useAppStore.getState().setLikedPosts(myLikedPosts);
 
       setAllComments(comments);
       setAllReactions(reactions);

@@ -489,6 +489,19 @@ export class ShyftClient {
     }
   }
 
+  async editPost(postId: number, content: string): Promise<string> {
+    const wallet = this.provider.wallet.publicKey;
+    if (!wallet) throw new Error("Wallet not connected");
+    try {
+      const sig = await requestServerTx("editPost", { postId, content }, this.provider.wallet, this.provider.connection);
+      rpcCache.invalidate("allPosts");
+      return sig;
+    } catch (err: any) {
+      console.error("Edit post error:", err);
+      throw err;
+    }
+  }
+
   async deletePost(postId: number): Promise<string> {
     const wallet = this.provider.wallet.publicKey;
     if (!wallet) throw new Error("Wallet not connected");
@@ -602,10 +615,28 @@ export class ShyftClient {
 
   async likePost(author: PublicKey, postId: number): Promise<string> {
     const sig = await requestServerTx("likePost", { author: author.toBase58(), postId }, this.provider.wallet, this.provider.connection);
+    rpcCache.invalidate("allReactions");
+    const userWallet = this.provider.wallet.publicKey;
+    if (userWallet) rpcCache.invalidate(`likedBy_${userWallet.toBase58()}`);
     return sig;
   }
 
-  // ========== COMMENTS ==========
+  async getLikedPostsByUser(userWallet: PublicKey): Promise<string[]> {
+    const cacheKey = `likedBy_${userWallet.toBase58()}`;
+    const cached = rpcCache.get<string[]>(cacheKey);
+    if (cached) return cached;
+    try {
+      const all = await this.accounts.likeRecord.all([
+        { memcmp: { offset: 8 + 32, bytes: userWallet.toBase58() } }
+      ]);
+      const result = all.map((r: any) => r.account.post.toBase58());
+      rpcCache.set(cacheKey, result);
+      return result;
+    } catch (err) {
+      console.error("getLikedPostsByUser error:", err);
+      return [];
+    }
+  }
 
   async createComment(author: PublicKey, postId: number, commentIndex: number, content: string): Promise<string> {
     const sig = await requestServerTx("createComment", { author: author.toBase58(), postId, commentIndex, content }, this.provider.wallet, this.provider.connection);

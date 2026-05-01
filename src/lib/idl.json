@@ -1159,6 +1159,66 @@
       ]
     },
     {
+      "name": "edit_post",
+      "discriminator": [
+        218,
+        25,
+        82,
+        105,
+        200,
+        189,
+        238,
+        75
+      ],
+      "accounts": [
+        {
+          "name": "post",
+          "docs": [
+            "The post PDA — seeded by the author's pubkey, so only the real author's post is found"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "author"
+              },
+              {
+                "kind": "arg",
+                "path": "post_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "author",
+          "docs": [
+            "Must be the original author — if anyone else signs, the seed/constraint check fails"
+          ],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_post_id",
+          "type": "u64"
+        },
+        {
+          "name": "new_content",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "follow_user",
       "discriminator": [
         126,
@@ -2799,6 +2859,10 @@
           },
           {
             "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "updated_at",
             "type": "i64"
           }
         ]

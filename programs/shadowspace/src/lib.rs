@@ -104,6 +104,19 @@ pub mod shadowspace {
         Ok(())
     }
 
+    pub fn edit_post(
+        ctx: Context<EditPost>,
+        _post_id: u64,
+        new_content: String,
+    ) -> Result<()> {
+        require!(new_content.len() <= 500, ShadowError::ContentTooLong);
+        let post = &mut ctx.accounts.post;
+        post.content = new_content;
+        post.updated_at = Clock::get()?.unix_timestamp;
+        msg!("Post {} edited by {}", post.post_id, post.author);
+        Ok(())
+    }
+
     pub fn like_post(ctx: Context<LikePost>, _post_id: u64) -> Result<()> {
         // Record the like — PDA uniqueness via `init` prevents double-liking
         let like_record = &mut ctx.accounts.like_record;
@@ -504,6 +517,17 @@ pub struct CreatePost<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(post_id: u64)]
+pub struct EditPost<'info> {
+    /// The post PDA — seeded by the author's pubkey, so only the real author's post is found
+    #[account(mut, seeds = [POST_SEED, author.key().as_ref(), &post_id.to_le_bytes()], bump,
+        constraint = post.author == author.key() @ ShadowError::Unauthorized)]
+    pub post: Account<'info, Post>,
+    /// Must be the original author — if anyone else signs, the seed/constraint check fails
+    pub author: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -920,11 +944,12 @@ pub struct Post {
     pub likes: u32,
     pub comment_count: u32,
     pub created_at: i64,
+    pub updated_at: i64,  // 0 means never edited
 }
 
 impl Post {
-    // 32(author) + 8(post_id) + 4(str_prefix) + 500(content) + 1(private) + 4(likes) + 4(comments) + 8(timestamp)
-    pub const LEN: usize = 32 + 8 + 4 + 500 + 1 + 4 + 4 + 8;
+    // 32(author) + 8(post_id) + 4(str_prefix) + 500(content) + 1(private) + 4(likes) + 4(comments) + 8(created_at) + 8(updated_at)
+    pub const LEN: usize = 32 + 8 + 4 + 500 + 1 + 4 + 4 + 8 + 8;
 }
 
 #[account]

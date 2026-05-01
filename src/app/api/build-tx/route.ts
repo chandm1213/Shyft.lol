@@ -233,6 +233,17 @@ const actions: Record<string, ActionHandler> = {
       .instruction();
   },
 
+  async editPost(params, user, treasury, program) {
+    const { postId, content } = params;
+    if (postId === undefined) throw new Error("Missing postId");
+    if (!content) throw new Error("Missing content");
+    const [postPda] = getPostPda(user, postId);
+    return program.methods
+      .editPost(new BN(postId), content)
+      .accountsPartial({ post: postPda, author: user })
+      .instruction();
+  },
+
   async closePost(params, user, treasury, program) {
     const { postId } = params;
     if (postId === undefined) throw new Error("Missing postId");
