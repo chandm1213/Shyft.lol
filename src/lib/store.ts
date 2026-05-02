@@ -53,6 +53,7 @@ interface AppState {
   addOnChainComment: (postKey: string, author: string, displayName: string, content: string) => void;
   likedPosts: string[]; // array of post publicKeys the user has liked
   addLikedPost: (postKey: string) => void;
+  setLikedPosts: (postKeys: string[]) => void;
 
   // Paid post unlocks
   unlockedPosts: string[]; // post publicKeys the user has paid to unlock
@@ -231,6 +232,9 @@ export const useAppStore = create<AppState>()(
   likedPosts: [],
   addLikedPost: (postKey) => set((state) => ({
     likedPosts: state.likedPosts.includes(postKey) ? state.likedPosts : [...state.likedPosts, postKey],
+  })),
+  setLikedPosts: (postKeys) => set((state) => ({
+    likedPosts: [...new Set([...state.likedPosts, ...postKeys])],
   })),
 
   // Paid post unlocks

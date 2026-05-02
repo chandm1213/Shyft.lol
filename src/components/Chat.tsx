@@ -18,7 +18,10 @@ import {
   EyeOff,
   Check,
   Loader2,
+  Phone,
+  Video,
 } from "lucide-react";
+import CallModal from "@/components/CallModal";
 import { useProgram } from "@/hooks/useProgram";
 import { toast } from "@/components/Toast";
 import { useWallet } from "@/hooks/usePrivyWallet";
@@ -104,6 +107,9 @@ export default function Chat() {
 
   // MagicBlock private USDC payment hook
   const { sendPrivatePayment, step: mbStep, error: mbError, txSignature: mbTxSig, reset: resetMb } = useMagicBlockPayment();
+
+  // Call state
+  const [callMode, setCallMode] = useState<"voice" | "video" | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -728,14 +734,43 @@ export default function Chat() {
                   )}
                 </div>
               </div>
-              {activeChat.exists && (
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => loadMessages(activeChat)}
-                  disabled={loadingMessages}
-                  className="w-8 h-8 rounded-lg hover:bg-[#F1F5F9] flex items-center justify-center"
+                  onClick={() => setCallMode("voice")}
+                  title="Voice call"
+                  className="w-8 h-8 rounded-lg hover:bg-[#F1F5F9] flex items-center justify-center transition-colors"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 text-[#94A3B8] ${loadingMessages ? "animate-spin" : ""}`} />
+                  <Phone className="w-4 h-4 text-[#16A34A]" />
                 </button>
+                <button
+                  onClick={() => setCallMode("video")}
+                  title="Video call"
+                  className="w-8 h-8 rounded-lg hover:bg-[#F1F5F9] flex items-center justify-center transition-colors"
+                >
+                  <Video className="w-4 h-4 text-[#2563EB]" />
+                </button>
+                {activeChat.exists && (
+                  <button
+                    onClick={() => loadMessages(activeChat)}
+                    disabled={loadingMessages}
+                    className="w-8 h-8 rounded-lg hover:bg-[#F1F5F9] flex items-center justify-center"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-[#94A3B8] ${loadingMessages ? "animate-spin" : ""}`} />
+                  </button>
+                )}
+              </div>
+
+              {/* Call Modal */}
+              {callMode && publicKey && (
+                <CallModal
+                  myAddress={publicKey.toBase58()}
+                  peerAddress={activeChat.friend.address}
+                  peerName={activeChat.friend.displayName}
+                  peerAvatar={activeChat.friend.avatar}
+                  mode={callMode}
+                  isIncoming={false}
+                  onClose={() => setCallMode(null)}
+                />
               )}
 
             </div>
