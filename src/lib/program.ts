@@ -1018,25 +1018,24 @@ export class ShyftClient {
   private _peerKeyCache = new Map<string, Uint8Array>();
 
   async findPeerEncryptionKey(chatId: number, myAddress: string): Promise<Uint8Array | null> {
-    // Return cached result if we already found the peer key for this chat
-    const cacheKey = `${chatId}:${myAddress}`;
-    const cached = this._peerKeyCache.get(cacheKey);
-    if (cached) return cached;
+    // NOTE: do NOT use cache here — always re-scan so we pick up re-published keys
+    // (a peer may have re-derived their keypair and published a new PUBKEY at a higher index)
 
-    // Scan message PDAs 0-9 directly — do NOT rely on chat.messageCount
-    // because the chat account may be stale/cached even with getAccountInfo
     console.log(`findPeerEncryptionKey: chatId=${chatId}, myAddr=${myAddress.slice(0, 8)}...`);
 
     const coder = new BorshCoder(idl as Idl);
+    let lastFoundKey: Uint8Array | null = null;
+    let lastFoundIdx = -1;
     let consecutiveMisses = 0;
-    for (let i = 0; i < 10; i++) {
+
+    // Scan up to 60 messages — high enough for active chats, returns the LATEST key found
+    for (let i = 0; i < 60; i++) {
       try {
         const [pda] = getMessagePda(chatId, i);
         const accInfo = await this.provider.connection.getAccountInfo(pda, "confirmed");
         if (!accInfo) {
           consecutiveMisses++;
-          // If we've missed 3+ in a row, no more messages exist
-          if (consecutiveMisses >= 3) break;
+          if (consecutiveMisses >= 5) break; // 5 consecutive misses = end of chat
           continue;
         }
         consecutiveMisses = 0;
@@ -1048,14 +1047,21 @@ export class ShyftClient {
         if (isPubkeyMessage(content)) {
           const key = parsePubkeyMessage(content);
           if (key && key.length === 32) {
-            console.log(`  ✅ Found peer key at msg[${i}]!`);
-            this._peerKeyCache.set(cacheKey, key);
-            return key;
+            // Keep scanning — we want the MOST RECENT key, not the first
+            lastFoundKey = key;
+            lastFoundIdx = i;
           }
         }
       } catch (err) {
         console.log(`  msg[${i}]: fetch failed (${err})`);
       }
+    }
+
+    if (lastFoundKey) {
+      console.log(`  ✅ Using peer key from msg[${lastFoundIdx}] (most recent)`);
+      const cacheKey = `${chatId}:${myAddress}`;
+      this._peerKeyCache.set(cacheKey, lastFoundKey);
+      return lastFoundKey;
     }
     console.log("  ❌ No peer key found");
     return null;
