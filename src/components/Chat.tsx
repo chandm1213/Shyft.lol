@@ -20,8 +20,14 @@ import {
   Loader2,
   Phone,
   Video,
+  PhoneOff,
+  PhoneIncoming,
 } from "lucide-react";
 import CallModal from "@/components/CallModal";
+
+function getCallRoomName(a: string, b: string): string {
+  return [a, b].sort().join("_call_");
+}
 import { useProgram } from "@/hooks/useProgram";
 import { toast } from "@/components/Toast";
 import { useWallet } from "@/hooks/usePrivyWallet";
@@ -110,6 +116,31 @@ export default function Chat() {
 
   // Call state
   const [callMode, setCallMode] = useState<"voice" | "video" | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ mode: "voice" | "video"; from: string } | null>(null);
+  const seenCallMessages = useRef(new Set<string>());
+
+  // Send a CALL signal message in chat, then open the modal
+  const handleStartCall = async (mode: "voice" | "video") => {
+    if (!activeChat || !program || !publicKey) return;
+    const myAddr = publicKey.toBase58();
+    const roomName = getCallRoomName(myAddr, activeChat.friend.address);
+    const callContent = `CALL:${mode}:${roomName}`;
+
+    // Send signal on-chain as a plain message
+    try {
+      let chatInfo = activeChat;
+      if (!chatInfo.exists) {
+        toast("error", "Start a chat first", "Send a message before calling");
+        return;
+      }
+      const msgIndex = await program.getNextMessageIndex(chatInfo.chatId);
+      await program.sendMessageSimple(chatInfo.chatId, msgIndex, `PLAIN:${callContent}`);
+    } catch (err) {
+      console.error("Call signal send failed:", err);
+    }
+
+    setCallMode(mode);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -257,6 +288,19 @@ export default function Chat() {
           peerKey
         );
         setMessages(decrypted);
+        // Detect incoming call signals from peer
+        for (const msg of decrypted) {
+          if (msg.isMe) continue;
+          const text = msg.decrypted || msg.content || "";
+          if (text.startsWith("CALL:") && !seenCallMessages.current.has(msg.publicKey + msg.messageIndex)) {
+            seenCallMessages.current.add(msg.publicKey + msg.messageIndex);
+            const parts = text.split(":");
+            if (parts.length >= 2) {
+              const cMode = parts[1] as "voice" | "video";
+              if (!callMode) setIncomingCall({ mode: cMode, from: msg.sender });
+            }
+          }
+        }
       } else {
         const raw = await program.getMessagesForChat(chatInfo.chatId);
         setMessages(raw.map((m: any) => ({
@@ -736,14 +780,14 @@ export default function Chat() {
               </div>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setCallMode("voice")}
+                  onClick={() => handleStartCall("voice")}
                   title="Voice call"
                   className="w-8 h-8 rounded-lg hover:bg-[#F1F5F9] flex items-center justify-center transition-colors"
                 >
                   <Phone className="w-4 h-4 text-[#16A34A]" />
                 </button>
                 <button
-                  onClick={() => setCallMode("video")}
+                  onClick={() => handleStartCall("video")}
                   title="Video call"
                   className="w-8 h-8 rounded-lg hover:bg-[#F1F5F9] flex items-center justify-center transition-colors"
                 >
@@ -760,6 +804,31 @@ export default function Chat() {
                 )}
               </div>
 
+              {/* Incoming call banner */}
+              {incomingCall && !callMode && (
+                <div className="absolute top-14 left-0 right-0 z-40 mx-4 bg-[#1A1A2E] text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-2xl border border-[#16A34A]/30">
+                  <div className="w-9 h-9 rounded-full bg-[#16A34A] flex items-center justify-center animate-pulse flex-shrink-0">
+                    <PhoneIncoming className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{activeChat.friend.displayName}</p>
+                    <p className="text-xs text-white/60">Incoming {incomingCall.mode} call...</p>
+                  </div>
+                  <button
+                    onClick={() => setIncomingCall(null)}
+                    className="w-9 h-9 rounded-full bg-[#EF4444] flex items-center justify-center flex-shrink-0"
+                  >
+                    <PhoneOff className="w-4 h-4 text-white" />
+                  </button>
+                  <button
+                    onClick={() => { setCallMode(incomingCall.mode); setIncomingCall(null); }}
+                    className="w-9 h-9 rounded-full bg-[#16A34A] flex items-center justify-center flex-shrink-0"
+                  >
+                    <Phone className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              )}
+
               {/* Call Modal */}
               {callMode && publicKey && (
                 <CallModal
@@ -768,8 +837,8 @@ export default function Chat() {
                   peerName={activeChat.friend.displayName}
                   peerAvatar={activeChat.friend.avatar}
                   mode={callMode}
-                  isIncoming={false}
-                  onClose={() => setCallMode(null)}
+                  isIncoming={!!incomingCall}
+                  onClose={() => { setCallMode(null); setIncomingCall(null); }}
                 />
               )}
 
@@ -828,6 +897,7 @@ export default function Chat() {
 
               {messages.filter(m => !m.isKeyExchange).map((msg, i) => {
                 const isPaymentMsg = msg.isPayment || msg.decrypted?.startsWith("PAY:") || msg.content?.startsWith("PAY:");
+                const isCallMsg = (msg.decrypted || "").startsWith("CALL:") || (msg.content || "").startsWith("PLAIN:CALL:");
                 let displayText = msg.isEncrypted
                   ? (msg.decrypted || "🔒 Unable to decrypt")
                   : msg.content;
@@ -849,9 +919,47 @@ export default function Chat() {
                   }
                 }
 
+                // Parse call mode for display
+                const callMsgMode = isCallMsg
+                  ? ((msg.decrypted || msg.content || "").split(":")[1] || "voice") as "voice" | "video"
+                  : "voice";
+
                 return (
                   <div key={`${msg.timestamp}-${i}`} className={`flex ${msg.isMe ? "justify-end" : "justify-start"}`}>
-                    {isPaymentMsg ? (
+                    {isCallMsg ? (
+                      <div className={`max-w-[85%] sm:max-w-[260px] rounded-2xl overflow-hidden border ${
+                        msg.isMe ? "border-[#2563EB]/30 bg-[#EFF6FF]" : "border-[#16A34A]/30 bg-[#F0FDF4]"
+                      }`}>
+                        <div className={`px-4 py-3 flex items-center gap-3`}>
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            msg.isMe ? "bg-[#2563EB]" : "bg-[#16A34A]"
+                          }`}>
+                            {callMsgMode === "video"
+                              ? <Video className="w-4 h-4 text-white" />
+                              : <Phone className="w-4 h-4 text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-[#1A1A2E]">
+                              {callMsgMode === "video" ? "Video Call" : "Voice Call"}
+                            </p>
+                            <p className="text-xs text-[#64748B]">
+                              {msg.isMe ? "You called" : `${activeChat.friend.displayName} called`}
+                            </p>
+                          </div>
+                          {!msg.isMe && (
+                            <button
+                              onClick={() => { setCallMode(callMsgMode); setIncomingCall(null); }}
+                              className="text-xs font-semibold text-white bg-[#16A34A] px-3 py-1.5 rounded-lg hover:bg-[#15803D] transition-colors flex-shrink-0"
+                            >
+                              Join
+                            </button>
+                          )}
+                        </div>
+                        <div className={`px-4 py-1 text-[10px] ${msg.isMe ? "text-[#93C5FD]" : "text-[#86EFAC]"}`}>
+                          {Number(msg.timestamp) > 0 ? timeAgo(Number(msg.timestamp) * 1000) : "now"}
+                        </div>
+                      </div>
+                    ) : isPaymentMsg ? (
                       <div
                         className={`max-w-[85%] sm:max-w-[320px] rounded-2xl text-sm overflow-hidden ${
                           msg.isMe
