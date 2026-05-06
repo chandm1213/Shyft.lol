@@ -24,6 +24,17 @@ const VIDEO_EXTS = /\.(mp4|webm|ogg|mov)(\?.*)?$/i;
 
 /* ── IPFS URLs (Pinata, etc.) ── */
 const IPFS_URL = /\.mypinata\.cloud\/ipfs\/|ipfs\.io\/ipfs\/|cloudflare-ipfs\.com\/ipfs\/|gateway\.pinata\.cloud\/ipfs\//i;
+
+/** Rewrite any IPFS gateway URL to ipfs.io to avoid rate limits */
+function normalizeIpfsUrl(url: string): string {
+  const match = url.match(/\/ipfs\/([a-zA-Z0-9]+)(\/[^?#]*)?(\?.*)?$/i);
+  if (match) {
+    const cid = match[1];
+    const path = match[2] || "";
+    return `https://ipfs.io/ipfs/${cid}${path}`;
+  }
+  return url;
+}
 /** IPFS URLs that are NOT videos — treat as images */
 const IPFS_IMAGE_URL = { test: (u: string) => IPFS_URL.test(u) && !VIDEO_EXTS.test(u) };
 /** IPFS URLs that ARE videos */
@@ -138,7 +149,7 @@ export function RichContent({ content, className = "" }: RichContentProps) {
           imageUrls.length === 1 ? "" : "grid grid-cols-2 gap-0.5"
         }`}>
           {imageUrls.map((url, i) => (
-            <ImagePreview key={i} url={url} single={imageUrls.length === 1} />
+            <ImagePreview key={i} url={IPFS_URL.test(url) ? normalizeIpfsUrl(url) : url} single={imageUrls.length === 1} />
           ))}
         </div>
       )}
