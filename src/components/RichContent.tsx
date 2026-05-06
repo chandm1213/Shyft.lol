@@ -25,13 +25,13 @@ const VIDEO_EXTS = /\.(mp4|webm|ogg|mov)(\?.*)?$/i;
 /* ── IPFS URLs (Pinata, etc.) ── */
 const IPFS_URL = /\.mypinata\.cloud\/ipfs\/|ipfs\.io\/ipfs\/|cloudflare-ipfs\.com\/ipfs\/|gateway\.pinata\.cloud\/ipfs\//i;
 
-/** Rewrite any IPFS gateway URL to dedicated Pinata gateway to avoid rate limits */
+/** Rewrite any IPFS gateway URL to ipfs.io (serves any CID from any account) */
 function normalizeIpfsUrl(url: string): string {
   const match = url.match(/\/ipfs\/([a-zA-Z0-9]+)(\/[^?#]*)?(\?.*)?$/i);
   if (match) {
     const cid = match[1];
     const path = match[2] || "";
-    return `https://amethyst-secondary-orca-737.mypinata.cloud/ipfs/${cid}${path}`;
+    return `https://ipfs.io/ipfs/${cid}${path}`;
   }
   return url;
 }
