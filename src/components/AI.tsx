@@ -170,7 +170,7 @@ export default function AI() {
         </div>
         <div>
           <h1 className="text-lg font-bold text-[#1A1A2E]">Shyft AI</h1>
-          <p className="text-xs text-[#64748B]">Powered by Qwen 2.5 · running locally</p>
+          <p className="text-xs text-[#64748B]">Your on-chain AI assistant</p>
         </div>
         {messages.length > 0 && (
           <button

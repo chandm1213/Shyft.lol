@@ -4,10 +4,13 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  try {
   const { messages } = await req.json();
 
-  const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-  const MODEL = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+  const XAI_API_KEY = process.env.XAI_API_KEY;
+  if (!XAI_API_KEY) {
+    return new Response(JSON.stringify({ error: "XAI_API_KEY not set" }), { status: 502 });
+  }
 
   const systemPrompt = `You are Shyft AI — a helpful assistant built into Shyft, an on-chain social network on the Solana blockchain.
 
@@ -20,49 +23,58 @@ Key facts about Shyft:
 - Website: shyft.lol
 
 You are knowledgeable about Solana, crypto, DeFi, NFTs, and web3 in general.
-Be concise, helpful, and friendly. Keep responses focused and not too long.`;
+Be concise, helpful, and friendly. Keep responses focused and not too long.
+IMPORTANT: Never mention "Grok", "xAI", or "X.AI" — you are Shyft AI, built by the Shyft team.`;
 
-  const ollamaMessages = [
-    { role: "system", content: systemPrompt },
-    ...messages,
-  ];
-
-  const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: ollamaMessages,
-      stream: true,
-    }),
-  });
-
-  if (!ollamaRes.ok || !ollamaRes.body) {
-    return new Response(JSON.stringify({ error: "Ollama unavailable" }), { status: 502 });
+  let res: Response;
+  try {
+    res = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${XAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "grok-3-mini",
+        stream: true,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages,
+        ],
+      }),
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: "AI fetch failed: " + msg }), { status: 502 });
   }
 
-  // Stream the response back as text/event-stream
+  if (!res.ok || !res.body) {
+    const err = await res.text().catch(() => "");
+    return new Response(JSON.stringify({ error: err || "AI unavailable" }), { status: 502 });
+  }
+
+  // Forward SSE stream, extracting just the text content
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const reader = ollamaRes.body!.getReader();
+      const reader = res.body!.getReader();
       const decoder = new TextDecoder();
+      let buffer = "";
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n").filter(Boolean);
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
           for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (data === "[DONE]") { controller.close(); return; }
             try {
-              const json = JSON.parse(line);
-              if (json.message?.content) {
-                controller.enqueue(encoder.encode(json.message.content));
-              }
-              if (json.done) {
-                controller.close();
-                return;
-              }
+              const json = JSON.parse(data);
+              const content = json.choices?.[0]?.delta?.content;
+              if (content) controller.enqueue(encoder.encode(content));
             } catch {}
           }
         }
@@ -77,9 +89,12 @@ Be concise, helpful, and friendly. Keep responses focused and not too long.`;
   return new Response(stream, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
-      "Transfer-Encoding": "chunked",
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
     },
   });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: "Internal error: " + msg }), { status: 500 });
+  }
 }
