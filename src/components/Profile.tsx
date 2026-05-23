@@ -1018,7 +1018,7 @@ export default function Profile() {
             </div>
 
             {/* Banner edit */}
-            <div className="h-[200px] relative overflow-hidden group">
+            <div className="h-[200px] relative overflow-hidden group cursor-pointer" onClick={() => pickImage("banner")}>
               {editBannerPreview || editBannerUrl ? (
                 <img
                   src={editBannerPreview || editBannerUrl}
@@ -1028,17 +1028,17 @@ export default function Profile() {
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-[#2563EB] via-[#3B82F6] to-[#60A5FA]" />
               )}
-              <div className="absolute inset-0 bg-black/30 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center gap-3 transition-all">
                 <button
-                  onClick={() => pickImage("banner")}
-                  className="w-11 h-11 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); pickImage("banner"); }}
+                  className="w-11 h-11 bg-black/50 group-hover:bg-black/70 rounded-full flex items-center justify-center transition-colors"
                 >
                   <Camera className="w-5 h-5 text-white" />
                 </button>
                 {(editBannerPreview || editBannerUrl) && (
                   <button
-                    onClick={() => { setEditBannerPreview(null); setEditBannerFile(null); setEditBannerUrl(""); }}
-                    className="w-11 h-11 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); setEditBannerPreview(null); setEditBannerFile(null); setEditBannerUrl(""); }}
+                    className="w-11 h-11 bg-black/50 group-hover:bg-black/70 rounded-full flex items-center justify-center transition-colors"
                   >
                     <X className="w-5 h-5 text-white" />
                   </button>

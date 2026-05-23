@@ -34,7 +34,9 @@ interface StatsCache {
 }
 
 let cache: StatsCache | null = null;
-const CACHE_TTL = 60_000; // 60 seconds
+let cachedTxCount: { value: number; fetchedAt: number } | null = null;
+const CACHE_TTL = 10 * 60_000;      // 10 minutes — account counts
+const TX_CACHE_TTL = 60 * 60_000;   // 1 hour   — tx count (expensive paginated query)
 
 /**
  * Paginate through ALL transaction signatures for the program.
@@ -101,11 +103,20 @@ async function fetchStats(): Promise<Record<string, number>> {
         }).then(accounts => ({ name, count: accounts.length }))
       )
     ),
-    // 2) Total transaction count (paginated, all-time)
-    getTotalTransactions(connection).catch((err) => {
-      console.error("Failed to fetch tx count:", err?.message || err);
-      return cache?.data.Transactions || 0;
-    }),
+    // 2) Total transaction count — cached separately for 1 hour (paginated, expensive)
+    (async () => {
+      if (cachedTxCount && Date.now() - cachedTxCount.fetchedAt < TX_CACHE_TTL) {
+        return cachedTxCount.value;
+      }
+      try {
+        const count = await getTotalTransactions(connection);
+        cachedTxCount = { value: count, fetchedAt: Date.now() };
+        return count;
+      } catch (err: any) {
+        console.error("Failed to fetch tx count:", err?.message || err);
+        return cachedTxCount?.value || cache?.data.Transactions || 0;
+      }
+    })(),
     getBagsTokenCount(),
   ]);
 
@@ -142,7 +153,7 @@ export async function GET() {
       tokens_launched: stats.BagsTokens || 0,
     }, {
       headers: {
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+        "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1200",
       },
     });
   } catch (err: any) {

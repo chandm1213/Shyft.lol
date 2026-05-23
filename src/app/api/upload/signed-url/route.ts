@@ -7,10 +7,16 @@ import { PinataSDK } from "pinata";
  * GET /api/upload/signed-url
  */
 
-const pinata = new PinataSDK({
-  pinataJwt: process.env.PINATA_JWT!.trim(),
-  pinataGateway: (process.env.PINATA_GATEWAY || "gateway.pinata.cloud").trim(),
-});
+function getPinataClient(): PinataSDK {
+  const pinataJwt = (process.env.PINATA_JWT || "").trim();
+  if (!pinataJwt) {
+    throw new Error("PINATA_JWT not configured");
+  }
+  return new PinataSDK({
+    pinataJwt,
+    pinataGateway: (process.env.PINATA_GATEWAY || "gateway.pinata.cloud").trim(),
+  });
+}
 
 const ALLOWED_ORIGINS = new Set([
   "https://www.shyft.lol",
@@ -21,6 +27,8 @@ const ALLOWED_ORIGINS = new Set([
 
 export async function GET(request: NextRequest) {
   try {
+    const pinata = getPinataClient();
+
     const origin = request.headers.get("origin") || "";
     const referer = request.headers.get("referer") || "";
     const allowed =
