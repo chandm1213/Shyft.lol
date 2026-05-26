@@ -25,6 +25,11 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:3001",
 ]);
 
+function isTrustedMobileClient(request: NextRequest): boolean {
+  const client = (request.headers.get("x-shyft-client") || "").toLowerCase();
+  return client === "mobile" || client === "ios" || client === "android";
+}
+
 export async function GET(request: NextRequest) {
   try {
     const pinata = getPinataClient();
@@ -33,7 +38,8 @@ export async function GET(request: NextRequest) {
     const referer = request.headers.get("referer") || "";
     const allowed =
       (origin && ALLOWED_ORIGINS.has(origin)) ||
-      [...ALLOWED_ORIGINS].some((o) => referer.startsWith(o));
+      [...ALLOWED_ORIGINS].some((o) => referer.startsWith(o)) ||
+      isTrustedMobileClient(request);
     if (!allowed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }

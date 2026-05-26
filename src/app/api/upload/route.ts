@@ -29,6 +29,11 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:3001",
 ]);
 
+function isTrustedMobileClient(request: NextRequest): boolean {
+  const client = (request.headers.get("x-shyft-client") || "").toLowerCase();
+  return client === "mobile" || client === "ios" || client === "android";
+}
+
 // ── Rate Limiting: 10 uploads per IP per minute ──
 const uploadIpTimestamps = new Map<string, number[]>();
 const UPLOAD_RATE_WINDOW_MS = 60_000;
@@ -60,8 +65,10 @@ export async function POST(request: NextRequest) {
 
     const origin = request.headers.get("origin") || "";
     const referer = request.headers.get("referer") || "";
-    const allowed = (origin && ALLOWED_ORIGINS.has(origin))
-      || [...ALLOWED_ORIGINS].some(o => referer.startsWith(o));
+    const allowed =
+      (origin && ALLOWED_ORIGINS.has(origin)) ||
+      [...ALLOWED_ORIGINS].some((o) => referer.startsWith(o)) ||
+      isTrustedMobileClient(request);
     if (!allowed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
