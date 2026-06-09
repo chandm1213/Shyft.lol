@@ -58,6 +58,8 @@ interface AppState {
   // Paid post unlocks
   unlockedPosts: string[]; // post publicKeys the user has paid to unlock
   addUnlockedPost: (postKey: string) => void;
+  postReceipts: Record<string, string>; // postKey -> x402 receiptId
+  addPostReceipt: (postKey: string, receiptId: string) => void;
 
   // Post tips
   postTips: Record<string, { totalAmount: number; tipCount: number; myTip: number }>;
@@ -242,6 +244,10 @@ export const useAppStore = create<AppState>()(
   addUnlockedPost: (postKey) => set((state) => ({
     unlockedPosts: state.unlockedPosts.includes(postKey) ? state.unlockedPosts : [...state.unlockedPosts, postKey],
   })),
+  postReceipts: {},
+  addPostReceipt: (postKey, receiptId) => set((state) => ({
+    postReceipts: { ...state.postReceipts, [postKey]: receiptId },
+  })),
 
   // Post tips
   postTips: {},
@@ -315,6 +321,7 @@ export const useAppStore = create<AppState>()(
         onChainComments: state.onChainComments,
         likedPosts: state.likedPosts,
         unlockedPosts: state.unlockedPosts,
+        postReceipts: state.postReceipts,
         postTips: state.postTips,
         notifications: state.notifications,
         seenNotificationKeys: state.seenNotificationKeys,

@@ -16,6 +16,133 @@ const URL_REGEX = /https?:\/\/[^\s<]+[^\s<.,;:!?"')\]]/gi;
 /* ── @mention regex ── */
 const MENTION_REGEX = /@([a-zA-Z0-9_]{1,30})/g;
 
+/* ── $TICKER regex — matches $BONK, $SOL, $WIF etc. (2–10 letters, word boundary) ── */
+const TICKER_REGEX = /\$([A-Za-z]{2,10})\b/g;
+
+/* ═══ Ticker price cache ═══ */
+type TickerData = { price: number; change24h: number; mint: string; name: string; image?: string; ts: number };
+const tickerCache = new Map<string, TickerData>();
+const pendingFetches = new Map<string, Promise<TickerData | null>>();
+const TICKER_TTL = 60_000;
+
+async function fetchTickerData(symbol: string): Promise<TickerData | null> {
+  const cached = tickerCache.get(symbol);
+  if (cached && Date.now() - cached.ts < TICKER_TTL) return cached;
+
+  if (pendingFetches.has(symbol)) return pendingFetches.get(symbol)!;
+
+  const promise = (async (): Promise<TickerData | null> => {
+    try {
+      const res = await fetch(
+        `https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(symbol)}`
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const pair = (data.pairs || []).find(
+        (p: any) =>
+          p.chainId === "solana" &&
+          p.baseToken?.symbol?.toUpperCase() === symbol.toUpperCase()
+      );
+      if (!pair) return null;
+      const entry: TickerData = {
+        price: parseFloat(pair.priceUsd) || 0,
+        change24h: pair.priceChange?.h24 || 0,
+        mint: pair.baseToken.address,
+        name: pair.baseToken.name,
+        image: pair.info?.imageUrl,
+        ts: Date.now(),
+      };
+      tickerCache.set(symbol, entry);
+      return entry;
+    } catch {
+      return null;
+    } finally {
+      pendingFetches.delete(symbol);
+    }
+  })();
+
+  pendingFetches.set(symbol, promise);
+  return promise;
+}
+
+function formatTickerPrice(p: number): string {
+  if (!p || p <= 0) return "";
+  if (p >= 1000) return `$${p.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  if (p >= 1) return `$${p.toFixed(3)}`;
+  if (p >= 0.01) return `$${p.toFixed(4)}`;
+  if (p >= 0.0001) return `$${p.toFixed(6)}`;
+  return `$${p.toExponential(2)}`;
+}
+
+/* ═══ TickerChip — inline tradeable token pill ═══ */
+function TickerChip({ symbol }: { symbol: string }) {
+  const [data, setData] = useState<TickerData | null | "loading">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTickerData(symbol).then((d) => {
+      if (!cancelled) setData(d);
+    });
+    return () => { cancelled = true; };
+  }, [symbol]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!data || data === "loading") return;
+    (window as any).__shyftTickerClick?.(symbol, data);
+  };
+
+  if (data === "loading") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 mx-0.5 rounded-full border border-[#E2E8F0] bg-[#F8FAFC] text-[12px] font-bold text-[#94A3B8] animate-pulse align-middle">
+        ${symbol}
+      </span>
+    );
+  }
+
+  if (!data) {
+    return <span className="text-[#6366F1] font-semibold">${symbol}</span>;
+  }
+
+  const isUp = data.change24h >= 0;
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      title={`${data.name} · click to trade`}
+      className="inline-flex items-center gap-1 px-2 py-0.5 mx-0.5 rounded-full border transition-all duration-150 cursor-pointer align-middle hover:scale-105 active:scale-95 hover:shadow-sm"
+      style={{
+        background: "linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 100%)",
+        borderColor: "#C7D2FE",
+      }}
+    >
+      {data.image && (
+        <img
+          src={data.image}
+          alt=""
+          className="w-3.5 h-3.5 rounded-full object-cover flex-shrink-0"
+          onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+        />
+      )}
+      <span className="text-[12px] font-bold text-[#4F46E5] leading-none">${symbol}</span>
+      {!!data.price && (
+        <>
+          <span className="text-[11px] text-[#64748B] leading-none font-medium">
+            {formatTickerPrice(data.price)}
+          </span>
+          <span
+            className="text-[10px] font-semibold leading-none"
+            style={{ color: isUp ? "#16A34A" : "#DC2626" }}
+          >
+            {isUp ? "▲" : "▼"}{Math.abs(data.change24h).toFixed(1)}%
+          </span>
+        </>
+      )}
+    </button>
+  );
+}
+
 /* ── Image extensions ── */
 const IMAGE_EXTS = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i;
 
@@ -66,8 +193,11 @@ export function RichContent({ content, className = "" }: RichContentProps) {
     const parts: (string | ReactNode)[] = [];
     let lastIndex = 0;
 
-    // Combined regex for URLs and @mentions
-    const COMBINED_REGEX = new RegExp(`(${URL_REGEX.source})|(@[a-zA-Z0-9_]{1,30})`, "gi");
+    // Combined regex for URLs, @mentions, and $TICKERS
+    const COMBINED_REGEX = new RegExp(
+      `(${URL_REGEX.source})|(@[a-zA-Z0-9_]{1,30})|(\\$[A-Za-z]{2,10}\\b)`,
+      "gi"
+    );
     const matches = [...content.matchAll(COMBINED_REGEX)];
 
     for (const match of matches) {
@@ -77,6 +207,14 @@ export function RichContent({ content, className = "" }: RichContentProps) {
       // Text before the match
       if (idx > lastIndex) {
         parts.push(content.slice(lastIndex, idx));
+      }
+
+      // $TICKER
+      if (fullMatch.startsWith("$")) {
+        const symbol = fullMatch.slice(1).toUpperCase();
+        parts.push(<TickerChip key={`ticker-${idx}`} symbol={symbol} />);
+        lastIndex = idx + fullMatch.length;
+        continue;
       }
 
       // @mention

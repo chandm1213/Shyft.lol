@@ -13,6 +13,7 @@ import { toast } from "@/components/Toast";
 import { RichContent, MediaBar, uploadMedia, isVideoFile } from "@/components/RichContent";
 import { useProgram } from "@/hooks/useProgram";
 import { useWallet, useConnection, pollConfirmation } from "@/hooks/usePrivyWallet";
+import { useX402Payment } from "@/hooks/useX402Payment";
 import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { ShyftClient, clearRpcCache } from "@/lib/program";
 import ProfileHoverCard from "@/components/ProfileHoverCard";
@@ -101,9 +102,10 @@ export function OnChainPostCard({
   onDelete: () => void;
   defaultShowComments?: boolean;
 }) {
-  const { likedPosts, addLikedPost, isConnected, currentUser, navigateToProfile, unlockedPosts, addUnlockedPost, addPayment, postTips, addPostTip } = useAppStore();
+  const { likedPosts, addLikedPost, isConnected, currentUser, navigateToProfile, unlockedPosts, addUnlockedPost, postReceipts, addPostReceipt, addPayment, postTips, addPostTip } = useAppStore();
   const { publicKey: walletKey, signTransaction } = useWallet();
   const { connection } = useConnection();
+  const { unlockPost } = useX402Payment();
   const [showComments, setShowComments] = useState(defaultShowComments);
   const [showReactions, setShowReactions] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -134,49 +136,30 @@ export function OnChainPostCard({
   const totalLikes = Number(post.likes || 0) + localLikeBoost;
   const totalComments = postComments.length;
 
-  /** Unlock a paid post by sending SOL directly to the creator's wallet */
+  /** Unlock a paid post via x402 — quote → pay (creator + 0.1% DNA fee) → finalize → receipt */
   const handleUnlock = async () => {
     if (!walletKey || !signTransaction || !connection || unlocking) return;
     setUnlocking(true);
     try {
-      const creatorPubkey = new PublicKey(post.author);
-      const lamports = Math.round(postPrice * LAMPORTS_PER_SOL);
+      toast("privacy", "Unlocking...", `Processing payment via x402`);
 
-      // Check balance
-      const balance = await connection.getBalance(walletKey);
-      if (balance < lamports + 10000) {
-        toast("error", "Insufficient SOL", `You need at least ${postPrice} SOL to unlock this post.`);
-        setUnlocking(false);
-        return;
-      }
-
-      toast("privacy", "Unlocking...", `Sending ${postPrice} SOL to creator`);
-
-      const tx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: walletKey,
-          toPubkey: creatorPubkey,
-          lamports,
-        })
+      const { sig, receiptId, totalSOL } = await unlockPost(
+        post.publicKey,
+        post.author,
+        postPrice,
       );
-
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = walletKey;
-
-      const signedTx = await signTransaction(tx);
-      const sig = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: false });
 
       // Poll for confirmation via HTTP — no WebSocket needed
       const confirmed = await pollConfirmation(connection, sig);
 
-      // Always unlock — user already signed & sent the tx
       addUnlockedPost(post.publicKey);
+      if (receiptId) addPostReceipt(post.publicKey, receiptId);
+
       addPayment({
         id: sig,
         sender: "me",
         recipient: post.author,
-        amount: postPrice,
+        amount: totalSOL,
         token: "SOL",
         status: "completed",
         isPrivate: false,
@@ -185,7 +168,7 @@ export function OnChainPostCard({
       });
 
       if (confirmed) {
-        toast("success", "Post unlocked! 🔓", `Paid ${postPrice} SOL — TX: ${sig.slice(0, 8)}...`);
+        toast("success", "Post unlocked! 🔓", receiptId ? `Receipt: ${receiptId.slice(0, 12)}...` : `TX: ${sig.slice(0, 8)}...`);
       } else {
         toast("success", "Post unlocked! 🔓", `Payment sent — TX: ${sig.slice(0, 8)}...`);
       }
@@ -526,7 +509,7 @@ export function OnChainPostCard({
                         </>
                       )}
                     </button>
-                    <p className="text-[10px] text-[#94A3B8] mt-2">Payment goes directly to creator&apos;s wallet</p>
+                    <p className="text-[10px] text-[#94A3B8] mt-2">Secured by x402 · payment goes directly to creator</p>
                   </div>
                 </div>
                 {/* Spacer so the card has enough height */}
@@ -537,11 +520,12 @@ export function OnChainPostCard({
 
           // Paid post — unlocked (show badge + content)
           if (isPaid && isUnlocked) {
+            const receipt = postReceipts[post.publicKey];
             return (
               <div>
                 {!isMe && (
-                  <div className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full mb-2">
-                    <Unlock className="w-2.5 h-2.5" /> Unlocked
+                  <div className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400 px-2 py-0.5 rounded-full mb-2" title={receipt ? `x402 receipt: ${receipt}` : undefined}>
+                    <Unlock className="w-2.5 h-2.5" /> Unlocked{receipt ? " · x402" : ""}
                   </div>
                 )}
                 {isMe && (
@@ -1287,6 +1271,27 @@ export default function Feed() {
     };
     return () => { delete (window as any).__shyftMentionClick; };
   }, [profileMap, navigateToProfile]);
+
+  // $TICKER click handler — opens trade modal for the tapped token
+  useEffect(() => {
+    (window as any).__shyftTickerClick = (symbol: string, tickerData: any) => {
+      const found = trendingTokens.find((t) => t.symbol.toUpperCase() === symbol.toUpperCase());
+      if (found) {
+        setSelectedTrendingToken(found);
+        return;
+      }
+      // Token not in trending list — build from DexScreener data
+      setSelectedTrendingToken({
+        tokenMint: tickerData.mint,
+        name: tickerData.name || symbol,
+        symbol: symbol.toUpperCase(),
+        image: tickerData.image || "",
+        priceUsd: tickerData.price,
+        priceChange24h: tickerData.change24h,
+      });
+    };
+    return () => { delete (window as any).__shyftTickerClick; };
+  }, [trendingTokens, setSelectedTrendingToken]);
 
   // Focus post from notification click — scroll to post and open comments
   useEffect(() => {

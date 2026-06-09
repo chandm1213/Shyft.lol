@@ -103,7 +103,7 @@ const REACTIONS = [
 export default function Profile() {
   const { currentUser, setCurrentUser, isConnected, viewingProfile, setViewingProfile, setActiveTab: setAppTab } = useAppStore();
   const program = useProgram();
-  const { publicKey } = useWallet();
+  const { publicKey, evmAddress, activeChain } = useWallet();
 
   // Are we viewing someone else's profile?
   const isViewingOther = !!(viewingProfile && publicKey && viewingProfile !== publicKey.toBase58());
@@ -119,6 +119,7 @@ export default function Profile() {
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
   const [activeTab, setActiveTab] = useState<"posts" | "likes">("posts");
   const [copied, setCopied] = useState(false);
+  const [copiedEvm, setCopiedEvm] = useState(false);
   const [realFollowerCount, setRealFollowerCount] = useState(0);
   const [realFollowingCount, setRealFollowingCount] = useState(0);
 
@@ -158,6 +159,7 @@ export default function Profile() {
   const { user: privyUser } = usePrivy();
   const { exportWallet: exportSolanaWallet } = useExportWallet();
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [ethBalance, setEthBalance] = useState<number | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [showQR, setShowQR] = useState(false);
 
@@ -218,6 +220,25 @@ export default function Profile() {
     const interval = setInterval(fetchBalance, 30_000);
     return () => clearInterval(interval);
   }, [fetchBalance]);
+
+  // Fetch ETH balance on Base for the EVM wallet
+  useEffect(() => {
+    if (!evmAddress) return;
+    const fetchEth = async () => {
+      try {
+        const res = await fetch("https://mainnet.base.org", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [evmAddress, "latest"] }),
+        });
+        const data = await res.json();
+        if (data.result) setEthBalance(parseInt(data.result, 16) / 1e18);
+      } catch {}
+    };
+    fetchEth();
+    const interval = setInterval(fetchEth, 30_000);
+    return () => clearInterval(interval);
+  }, [evmAddress]);
 
   async function handleExportWallet() {
     if (!publicKey) {
@@ -921,6 +942,75 @@ export default function Profile() {
             </a>
           </div>
         </div>
+
+        {/* Base wallet card — shown when user has an EVM wallet */}
+        {evmAddress && (
+          <div className="mt-3 bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] rounded-2xl border border-[#BFDBFE] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#0052FF" }}>
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white">
+                    <circle cx="12" cy="12" r="10" />
+                    <path fill="#0052FF" d="M12 4.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15zm.55 11.4v-2.47h-1.1v2.47A4.5 4.5 0 0 1 7.5 12a4.5 4.5 0 0 1 4.5-4.5 4.5 4.5 0 0 1 4.45 3.9H14a2 2 0 1 0-2 2c.188 0 .372-.025.55-.1z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1A1A2E]">Base Wallet</h3>
+                  <p className="text-[11px] text-[#3B82F6]">Base Mainnet · {activeChain === "base" ? "Active" : "Embedded"}</p>
+                </div>
+              </div>
+              {activeChain === "base" && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0052FF] text-white">Primary</span>
+              )}
+            </div>
+
+            {/* ETH balance */}
+            <div className="mb-4">
+              <p className="text-[11px] text-[#3B82F6] mb-0.5">Balance</p>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-extrabold text-[#1A1A2E]">
+                  {ethBalance !== null ? ethBalance.toFixed(4) : "..."}
+                </span>
+                <span className="text-sm font-medium text-[#3B82F6]">ETH</span>
+              </div>
+            </div>
+
+            {/* Base address */}
+            <div className="mb-4 bg-white rounded-xl border border-[#BFDBFE] px-3 py-2.5 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] text-[#93C5FD] mb-0.5">Base Address</p>
+                <p className="text-xs font-mono text-[#1A1A2E] truncate">{evmAddress}</p>
+              </div>
+              <button
+                onClick={() => { navigator.clipboard.writeText(evmAddress); setCopiedEvm(true); setTimeout(() => setCopiedEvm(false), 2000); }}
+                className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#EFF6FF] transition-colors"
+                title="Copy Base address"
+              >
+                {copiedEvm ? <Check className="w-3.5 h-3.5 text-[#16A34A]" /> : <Copy className="w-3.5 h-3.5 text-[#3B82F6]" />}
+              </button>
+            </div>
+
+            {/* Action buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { navigator.clipboard.writeText(evmAddress); setCopiedEvm(true); setTimeout(() => setCopiedEvm(false), 2000); }}
+                className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white rounded-xl border border-[#BFDBFE] hover:bg-[#EFF6FF] hover:border-[#0052FF]/30 transition-all group"
+              >
+                <Copy className="w-4 h-4 text-[#3B82F6]" />
+                <span className="text-[11px] font-medium text-[#3B82F6]">Copy Address</span>
+              </button>
+              <a
+                href={`https://basescan.org/address/${evmAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white rounded-xl border border-[#BFDBFE] hover:bg-[#EFF6FF] hover:border-[#0052FF]/30 transition-all group"
+              >
+                <ExternalLink className="w-4 h-4 text-[#3B82F6]" />
+                <span className="text-[11px] font-medium text-[#3B82F6]">Basescan</span>
+              </a>
+            </div>
+          </div>
+        )}
       </div>
       )}
 
