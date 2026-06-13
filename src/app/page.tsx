@@ -12,6 +12,7 @@ import Profile from "@/components/Profile";
 import CreatorDashboard from "@/components/CreatorDashboard";
 import Friends from "@/components/Friends";
 import Tokens from "@/components/Tokens";
+import Stocks from "@/components/Stocks";
 import Communities from "@/components/Communities";
 import TrendingSidebar from "@/components/TrendingSidebar";
 import AI from "@/components/AI";
@@ -120,6 +121,7 @@ export default function Home() {
           {activeTab === "chat" && <Chat />}
           {activeTab === "friends" && <Friends />}
           {activeTab === "tokens" && <Tokens />}
+          {activeTab === "stocks" && <Stocks />}
           {activeTab === "communities" && <Communities />}
           {activeTab === "payments" && <Payments />}
           {activeTab === "dashboard" && <CreatorDashboard />}

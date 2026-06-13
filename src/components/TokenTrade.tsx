@@ -22,6 +22,10 @@ interface TokenTradeProps {
   tokenImage?: string;
   onClose?: () => void;
   compact?: boolean;
+  /** Decimals of the non-SOL token (default 9, e.g. Bags tokens). xStocks use 8. */
+  decimals?: number;
+  /** Show Bags.fm links/attribution. Set false for non-Bags tokens (e.g. xStocks). */
+  showBagsLinks?: boolean;
 }
 
 function friendlyError(msg: string): string {
@@ -45,6 +49,8 @@ export default function TokenTrade({
   tokenImage,
   onClose,
   compact = false,
+  decimals = 9,
+  showBagsLinks = true,
 }: TokenTradeProps) {
   const { publicKey, signTransaction } = useWallet();
   const [mode, setMode] = useState<"buy" | "sell">("buy");
@@ -112,8 +118,9 @@ export default function TokenTrade({
       try {
         const inputMint = mode === "buy" ? SOL_MINT : tokenMint;
         const outputMint = mode === "buy" ? tokenMint : SOL_MINT;
-        // Bags tokens use 9 decimals (same as SOL)
-        const amountSmallest = Math.floor(Number(amount) * 1e9);
+        // Buy-side input is always SOL (9 decimals); sell-side input is the token
+        const inputDecimals = mode === "buy" ? 9 : decimals;
+        const amountSmallest = Math.floor(Number(amount) * Math.pow(10, inputDecimals));
 
         const res = await fetch("/api/bags", {
           method: "POST",
@@ -184,14 +191,16 @@ export default function TokenTrade({
             {mode === "buy" ? "Buy" : "Sell"} ${tokenSymbol}
           </span>
         </div>
-        <a
-          href={`https://bags.fm/${tokenMint}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-[#94A3B8] hover:text-[#2563EB] flex items-center gap-1"
-        >
-          Bags <ExternalLink className="w-3 h-3" />
-        </a>
+        {showBagsLinks && (
+          <a
+            href={`https://bags.fm/${tokenMint}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-[#94A3B8] hover:text-[#2563EB] flex items-center gap-1"
+          >
+            Bags <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
       </div>
 
       {/* Buy/Sell Toggle */}
@@ -290,7 +299,7 @@ export default function TokenTrade({
             <span className="text-[#64748B]">You {mode === "buy" ? "receive" : "get back"}</span>
             <span className="font-medium text-[#1A1A2E]">
               {mode === "buy"
-                ? `${(Number(quote.outAmount) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${tokenSymbol}`
+                ? `${(Number(quote.outAmount) / Math.pow(10, decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${tokenSymbol}`
                 : `${formatSOL(quote.outAmount)} SOL`}
             </span>
           </div>
@@ -304,7 +313,7 @@ export default function TokenTrade({
             <span className="text-[#64748B]">Min. received</span>
             <span className="text-[#475569]">
               {mode === "buy"
-                ? `${(Number(quote.minOutAmount) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${tokenSymbol}`
+                ? `${(Number(quote.minOutAmount) / Math.pow(10, decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${tokenSymbol}`
                 : `${formatSOL(quote.minOutAmount)} SOL`}
             </span>
           </div>
@@ -345,12 +354,23 @@ export default function TokenTrade({
         )}
       </button>
 
-      {/* Bags Attribution */}
+      {/* Attribution */}
       <p className="text-center text-[10px] text-[#94A3B8] mt-2">
-        Trading powered by{" "}
-        <a href="https://bags.fm" target="_blank" rel="noopener noreferrer" className="text-[#2563EB] hover:underline">
-          Bags.fm
-        </a>
+        {showBagsLinks ? (
+          <>
+            Trading powered by{" "}
+            <a href="https://bags.fm" target="_blank" rel="noopener noreferrer" className="text-[#2563EB] hover:underline">
+              Bags.fm
+            </a>
+          </>
+        ) : (
+          <>
+            Trading routed via{" "}
+            <a href="https://jup.ag" target="_blank" rel="noopener noreferrer" className="text-[#2563EB] hover:underline">
+              Jupiter
+            </a>
+          </>
+        )}
       </p>
     </div>
   );
