@@ -19,6 +19,7 @@ export interface StockToken {
 }
 
 export const XSTOCKS: StockToken[] = [
+  { symbol: "SPCXx", name: "SpaceX", mint: "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8" },
   { symbol: "AAPLx", name: "Apple Inc.", mint: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp" },
   { symbol: "MSFTx", name: "Microsoft Corp.", mint: "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX" },
   { symbol: "GOOGLx", name: "Alphabet Inc.", mint: "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN" },
@@ -36,10 +37,12 @@ export const XSTOCKS: StockToken[] = [
   { symbol: "WMTx", name: "Walmart Inc.", mint: "Xs151QeqTCiuKtinzfRATnUESM2xTU6V9Wy8Vy538ci" },
   { symbol: "MCDx", name: "McDonald's Corp.", mint: "XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2" },
   { symbol: "COINx", name: "Coinbase Global Inc.", mint: "Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu" },
+  { symbol: "CRCLx", name: "Circle Internet Group", mint: "XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1" },
   { symbol: "HOODx", name: "Robinhood Markets Inc.", mint: "XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg" },
   { symbol: "PLTRx", name: "Palantir Technologies Inc.", mint: "XsoBhf2ufR8fTyNSjqfU71DYGaE6Z3SUGAidpzriAA4" },
   { symbol: "MSTRx", name: "Strategy (MicroStrategy) Inc.", mint: "XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ" },
   { symbol: "GMEx", name: "GameStop Corp.", mint: "Xsf9mBktVB9BSU5kf4nHxPq5hCBJ2j2ui3ecFGxPRGc" },
+  { symbol: "BRK.Bx", name: "Berkshire Hathaway", mint: "Xs6B6zawENwAbWVi7w92rjazLuAr5Az59qgWKcNb45x" },
   { symbol: "SPYx", name: "SPDR S&P 500 ETF Trust", mint: "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W" },
   { symbol: "QQQx", name: "Invesco QQQ Trust", mint: "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ" },
   { symbol: "GLDx", name: "SPDR Gold Shares", mint: "Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re" },
@@ -47,6 +50,14 @@ export const XSTOCKS: StockToken[] = [
 
 export function getStockByMint(mint: string): StockToken | undefined {
   return XSTOCKS.find((s) => s.mint === mint);
+}
+
+/**
+ * Official xStocks logo for a given symbol (served from Backed Finance's CDN).
+ * Falls back gracefully in the UI if the image fails to load.
+ */
+export function stockLogoUrl(symbol: string): string {
+  return `https://xstocks-metadata.backed.fi/logos/tokens/${symbol}.png`;
 }
 
 /**

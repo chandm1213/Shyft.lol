@@ -10,7 +10,7 @@ import {
   ChevronRight,
   ShieldAlert,
 } from "lucide-react";
-import { XSTOCKS, STOCK_DECIMALS, formatStockPrice, type StockToken } from "@/lib/stocks";
+import { XSTOCKS, STOCK_DECIMALS, formatStockPrice, stockLogoUrl, type StockToken } from "@/lib/stocks";
 import { useAppStore } from "@/lib/store";
 import TokenTrade from "@/components/TokenTrade";
 
@@ -19,6 +19,26 @@ const DISCLAIMER_KEY = "shyft_xstocks_disclaimer_ack";
 interface PriceInfo {
   usdPrice: number;
   change24h: number;
+}
+
+/** Official xStock logo with a graceful fallback to a gradient letter avatar. */
+function StockAvatar({ stock, className }: { stock: StockToken; className: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className={`${className} rounded-full bg-gradient-to-br from-[#16A34A] to-[#2563EB] flex items-center justify-center flex-shrink-0`}>
+        <span className="font-bold text-white">{stock.symbol[0]}</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={stockLogoUrl(stock.symbol)}
+      alt={stock.symbol}
+      onError={() => setFailed(true)}
+      className={`${className} rounded-full object-cover bg-white flex-shrink-0`}
+    />
+  );
 }
 
 export default function Stocks() {
@@ -88,9 +108,7 @@ export default function Stocks() {
                 onClick={() => setSelectedStock(stock)}
                 className="w-full flex items-center gap-3 p-3 bg-white rounded-2xl border border-[#E2E8F0] hover:border-[#2563EB]/30 hover:shadow-sm transition text-left"
               >
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#16A34A] to-[#2563EB] flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-white">{stock.symbol[0]}</span>
-                </div>
+                <StockAvatar stock={stock} className="w-9 h-9 text-xs" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-semibold text-[#1A1A2E] truncate">{stock.name}</span>
@@ -130,9 +148,7 @@ export default function Stocks() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-y-auto">
             <div className="p-5 border-b border-[#E2E8F0]">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#16A34A] to-[#2563EB] flex items-center justify-center">
-                  <span className="text-lg font-bold text-white">{selectedStock.symbol[0]}</span>
-                </div>
+                <StockAvatar stock={selectedStock} className="w-12 h-12 text-lg" />
                 <div className="flex-1 min-w-0">
                   <h2 className="text-lg font-bold text-[#1A1A2E]">{selectedStock.name}</h2>
                   <span className="text-sm text-[#64748B]">${selectedStock.symbol}</span>
@@ -144,6 +160,7 @@ export default function Stocks() {
               <TokenTrade
                 tokenMint={selectedStock.mint}
                 tokenSymbol={selectedStock.symbol}
+                tokenImage={stockLogoUrl(selectedStock.symbol)}
                 decimals={STOCK_DECIMALS}
                 showBagsLinks={false}
                 compact
