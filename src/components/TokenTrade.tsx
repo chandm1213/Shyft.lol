@@ -261,7 +261,7 @@ export default function TokenTrade({
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-[#64748B]">Balance:</span>
               <span className="text-[10px] font-semibold text-[#1A1A2E]">
-                {loadingBalance ? "Loading..." : tokenBalance !== null ? `${tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${tokenSymbol}` : "--"}
+                {loadingBalance ? "Loading..." : tokenBalance !== null ? `${tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${tokenSymbol}` : "--"}
               </span>
             </div>
             <div className="flex gap-1.5">
@@ -270,8 +270,13 @@ export default function TokenTrade({
                   key={pct}
                   onClick={() => {
                     if (tokenBalance && tokenBalance > 0) {
-                      const val = (tokenBalance * pct) / 100;
-                      setAmount(pct === 100 ? Math.floor(val).toString() : Math.floor(val).toString());
+                      // 100% sells the full balance; otherwise take the fraction.
+                      const val = pct === 100 ? tokenBalance : (tokenBalance * pct) / 100;
+                      // Keep fractional amounts (tokens/xStocks can be < 1); trim to the
+                      // token's decimals via floor so we never exceed the balance.
+                      const factor = Math.pow(10, decimals);
+                      const trimmed = Math.floor(val * factor) / factor;
+                      setAmount(trimmed.toString());
                     }
                   }}
                   disabled={!tokenBalance || tokenBalance <= 0}
