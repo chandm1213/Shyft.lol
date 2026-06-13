@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  LineChart,
+  CandlestickChart,
   TrendingUp,
   TrendingDown,
   Loader2,
@@ -78,8 +78,8 @@ export default function Stocks() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#16A34A] to-[#2563EB] flex items-center justify-center">
-            <LineChart className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0F172A] to-[#1E293B] flex items-center justify-center ring-1 ring-white/10">
+            <CandlestickChart className="w-5 h-5 text-[#22C55E]" />
           </div>
           <div>
             <h1 className="text-lg font-bold text-[#1A1A2E]">Stocks</h1>
