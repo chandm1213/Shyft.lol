@@ -204,10 +204,10 @@ const actions: Record<string, ActionHandler> = {
   },
 
   async updateProfile(params, user, treasury, program) {
-    const { displayName, bio, avatarUrl, bannerUrl } = params;
+    const { displayName, bio, avatarUrl, bannerUrl, websiteUrl } = params;
     const [profilePda] = getProfilePda(user);
     return program.methods
-      .updateProfile(displayName || "", bio || "", avatarUrl || "", bannerUrl || "")
+      .updateProfile(displayName || "", bio || "", avatarUrl || "", bannerUrl || "", websiteUrl || "")
       .accounts({ profile: profilePda, user, payer: treasury, systemProgram: SystemProgram.programId })
       .instruction();
   },

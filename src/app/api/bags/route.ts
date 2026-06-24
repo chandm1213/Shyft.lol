@@ -323,6 +323,26 @@ export async function POST(req: NextRequest) {
         return ok(serialized);
       }
 
+      // ──── Resolve a social handle → fee-share wallet ────
+      case "resolve-fee-wallet": {
+        const { username, provider } = body;
+        const SUPPORTED = ["twitter", "tiktok", "kick", "github"];
+        if (!username || !provider) return err("Missing username or provider");
+        if (!SUPPORTED.includes(provider)) {
+          return err(`Unsupported provider. Use one of: ${SUPPORTED.join(", ")}`);
+        }
+
+        const cleanUsername = String(username).replace(/^@/, "").trim();
+        if (!cleanUsername) return err("Missing username");
+
+        const result = await sdk.state.getLaunchWalletV2(cleanUsername, provider);
+        return ok({
+          wallet: result.wallet.toString(),
+          provider: result.provider,
+          platformData: result.platformData,
+        });
+      }
+
       // ──── Get or create fee share config ────
       case "create-config": {
         const { payerWallet, tokenMint, feeClaimers } = body;

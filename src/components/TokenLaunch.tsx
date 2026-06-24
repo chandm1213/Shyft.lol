@@ -13,12 +13,23 @@ import {
   Info,
   CheckCircle2,
   AlertCircle,
+  Users,
+  AtSign,
+  Wallet,
+  Check,
 } from "lucide-react";
 import { useWallet, pollConfirmation, getSharedConnection } from "@/hooks/usePrivyWallet";
 import { toast } from "@/components/Toast";
 import { uploadImage } from "@/components/RichContent";
-import { VersionedTransaction } from "@solana/web3.js";
-import { BAGS_REF_CODE } from "@/lib/bags";
+import { VersionedTransaction, PublicKey } from "@solana/web3.js";
+import { BAGS_REF_CODE, resolveFeeWallet, type FeeProvider, type ResolvedFeeWallet } from "@/lib/bags";
+
+const FEE_PROVIDERS: { value: FeeProvider; label: string }[] = [
+  { value: "twitter", label: "X / Twitter" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "kick", label: "Kick" },
+  { value: "github", label: "GitHub" },
+];
 
 interface TokenLaunchProps {
   onClose: () => void;
@@ -54,6 +65,72 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
   const [result, setResult] = useState<{ tokenMint: string; metadataUrl: string } | null>(null);
   const [error, setError] = useState("");
 
+  // Fee recipient — by default the creator earns 100% of trading fees,
+  // but they can direct a share (or all) of it to another user.
+  const [feeMode, setFeeMode] = useState<"me" | "other">("me");
+  const [recipientType, setRecipientType] = useState<"handle" | "wallet">("handle");
+  const [recipientProvider, setRecipientProvider] = useState<FeeProvider>("twitter");
+  const [recipientHandle, setRecipientHandle] = useState("");
+  const [recipientWallet, setRecipientWallet] = useState("");
+  const [recipientShare, setRecipientShare] = useState(100);
+  const [resolvedRecipient, setResolvedRecipient] = useState<ResolvedFeeWallet | null>(null);
+  const [resolvingRecipient, setResolvingRecipient] = useState(false);
+
+  const handleVerifyHandle = async () => {
+    const handle = recipientHandle.trim().replace(/^@/, "");
+    if (!handle) {
+      setError("Enter a handle to verify");
+      return;
+    }
+    setResolvingRecipient(true);
+    setError("");
+    setResolvedRecipient(null);
+    try {
+      const r = await resolveFeeWallet(handle, recipientProvider);
+      setResolvedRecipient(r);
+      toast("success", "Recipient found!");
+    } catch (e: any) {
+      setError(friendlyError(e.message || "Couldn't find a wallet for that handle"));
+    }
+    setResolvingRecipient(false);
+  };
+
+  // Build the fee-share split sent to Bags. Sums to 10,000 bps (100%).
+  const buildFeeClaimers = (creatorWallet: string): Array<{ wallet: string; bps: number }> => {
+    if (feeMode === "me") {
+      return [{ wallet: creatorWallet, bps: 10000 }];
+    }
+
+    let recipient: string;
+    if (recipientType === "wallet") {
+      recipient = recipientWallet.trim();
+      try {
+        new PublicKey(recipient);
+      } catch {
+        throw new Error("Enter a valid recipient wallet address");
+      }
+    } else {
+      if (!resolvedRecipient) throw new Error("Verify the recipient's handle first");
+      recipient = resolvedRecipient.wallet;
+    }
+
+    const recBps = Math.round(recipientShare * 100);
+    if (recBps <= 0 || recBps > 10000) {
+      throw new Error("Recipient share must be between 1% and 100%");
+    }
+    const creatorBps = 10000 - recBps;
+
+    // If the recipient is the creator's own wallet, collapse to a single claimer.
+    if (recipient === creatorWallet) {
+      return [{ wallet: creatorWallet, bps: 10000 }];
+    }
+
+    const claimers: Array<{ wallet: string; bps: number }> = [];
+    if (creatorBps > 0) claimers.push({ wallet: creatorWallet, bps: creatorBps });
+    claimers.push({ wallet: recipient, bps: recBps });
+    return claimers;
+  };
+
   const handleImageSelect = async (file: File) => {
     if (!file.type.startsWith("image/")) {
       setError("Please select an image file");
@@ -87,6 +164,16 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
     }
 
     setError("");
+
+    // Resolve the fee split up front so a bad recipient fails before any tx.
+    let feeClaimers: Array<{ wallet: string; bps: number }>;
+    try {
+      feeClaimers = buildFeeClaimers(publicKey.toBase58());
+    } catch (err: any) {
+      setError(friendlyError(err.message));
+      return;
+    }
+
     setStep("creating");
 
     try {
@@ -120,7 +207,7 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
           action: "create-config",
           payerWallet: publicKey.toBase58(),
           tokenMint,
-          feeClaimers: [{ wallet: publicKey.toBase58(), bps: 10000 }],
+          feeClaimers,
         }),
       });
       const configData = await configRes.json();
@@ -388,6 +475,145 @@ export default function TokenLaunch({ onClose, onSuccess, username }: TokenLaunc
                 />
                 <span className="text-xs font-medium text-[#64748B]">SOL</span>
               </div>
+            </div>
+
+            {/* Fee Recipient */}
+            <div>
+              <label className="text-xs font-medium text-[#64748B] mb-1.5 block">Trading Fee Recipient</label>
+              <p className="text-[10px] text-[#94A3B8] mb-2">Choose who earns the trading fees from this token.</p>
+
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setFeeMode("me")}
+                  className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border transition ${
+                    feeMode === "me"
+                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#1D4ED8]"
+                      : "border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B] hover:border-[#CBD5E1]"
+                  }`}
+                >
+                  <Wallet className="w-4 h-4" /> I earn the fees
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFeeMode("other")}
+                  className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border transition ${
+                    feeMode === "other"
+                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#1D4ED8]"
+                      : "border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B] hover:border-[#CBD5E1]"
+                  }`}
+                >
+                  <Users className="w-4 h-4" /> Someone else
+                </button>
+              </div>
+
+              {feeMode === "other" && (
+                <div className="space-y-3 p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl">
+                  {/* Recipient type toggle */}
+                  <div className="flex gap-1 p-1 bg-[#EEF2F7] rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => { setRecipientType("handle"); setResolvedRecipient(null); }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition ${
+                        recipientType === "handle" ? "bg-white text-[#1A1A2E] shadow-sm" : "text-[#64748B]"
+                      }`}
+                    >
+                      <AtSign className="w-3.5 h-3.5" /> Social handle
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setRecipientType("wallet"); setResolvedRecipient(null); }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition ${
+                        recipientType === "wallet" ? "bg-white text-[#1A1A2E] shadow-sm" : "text-[#64748B]"
+                      }`}
+                    >
+                      <Wallet className="w-3.5 h-3.5" /> Wallet address
+                    </button>
+                  </div>
+
+                  {recipientType === "handle" ? (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <select
+                          value={recipientProvider}
+                          onChange={(e) => { setRecipientProvider(e.target.value as FeeProvider); setResolvedRecipient(null); }}
+                          className="bg-white border border-[#E2E8F0] rounded-lg px-2 py-2 text-xs text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                        >
+                          {FEE_PROVIDERS.map((p) => (
+                            <option key={p.value} value={p.value}>{p.label}</option>
+                          ))}
+                        </select>
+                        <div className="relative flex-1">
+                          <span className="absolute left-2.5 top-2 text-[#94A3B8] text-sm">@</span>
+                          <input
+                            type="text"
+                            value={recipientHandle}
+                            onChange={(e) => { setRecipientHandle(e.target.value); setResolvedRecipient(null); }}
+                            placeholder="username"
+                            className="w-full pl-6 pr-3 bg-white border border-[#E2E8F0] rounded-lg py-2 text-xs text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleVerifyHandle}
+                          disabled={resolvingRecipient || !recipientHandle.trim()}
+                          className="px-3 py-2 bg-[#2563EB] text-white rounded-lg text-xs font-medium hover:bg-[#1D4ED8] transition disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {resolvingRecipient ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify"}
+                        </button>
+                      </div>
+
+                      {resolvedRecipient && (
+                        <div className="flex items-center gap-2 p-2 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
+                          {resolvedRecipient.platformData?.avatar_url ? (
+                            <img src={resolvedRecipient.platformData.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-[#16A34A]/10 flex items-center justify-center">
+                              <Check className="w-4 h-4 text-[#16A34A]" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-[#166534] truncate">
+                              {resolvedRecipient.platformData?.display_name || resolvedRecipient.platformData?.username || "Verified"}
+                            </p>
+                            <p className="text-[10px] font-mono text-[#16A34A] truncate">
+                              {resolvedRecipient.wallet.slice(0, 6)}...{resolvedRecipient.wallet.slice(-6)}
+                            </p>
+                          </div>
+                          <Check className="w-4 h-4 text-[#16A34A] shrink-0" />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={recipientWallet}
+                      onChange={(e) => setRecipientWallet(e.target.value)}
+                      placeholder="Recipient's Solana wallet address"
+                      className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-xs font-mono text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+                    />
+                  )}
+
+                  {/* Split */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-medium text-[#64748B]">They earn</label>
+                      <span className="text-xs font-bold text-[#2563EB]">{recipientShare}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={100}
+                      value={recipientShare}
+                      onChange={(e) => setRecipientShare(Number(e.target.value))}
+                      className="w-full accent-[#2563EB]"
+                    />
+                    <p className="text-[10px] text-[#94A3B8] mt-1">
+                      You keep {100 - recipientShare}% · They get {recipientShare}% of all trading fees
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Info Banner */}

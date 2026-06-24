@@ -432,14 +432,14 @@ export class ShyftClient {
     );
   }
 
-  async updateProfile(displayName: string, bio: string, avatarUrl: string, bannerUrl: string): Promise<string> {
+  async updateProfile(displayName: string, bio: string, avatarUrl: string, bannerUrl: string, websiteUrl: string = ""): Promise<string> {
     const user = this.provider.wallet.publicKey;
     const [profilePda] = getProfilePda(user);
 
-    // Auto-migrate profile if account is undersized (e.g. avatar/banner fields grew)
+    // Auto-migrate profile if account is undersized (e.g. new fields added)
     try {
       const acctInfo = await this.provider.connection.getAccountInfo(profilePda);
-      const expectedSize = 8 + 32 + (4+16) + (4+24) + (4+64) + 1 + 4 + 4 + 4 + 2 + 8 + (4+128) + (4+128); // 8 + Profile::LEN
+      const expectedSize = 8 + 32 + (4+16) + (4+24) + (4+64) + 1 + 4 + 4 + 4 + 2 + 8 + (4+128) + (4+128) + (4+64); // 8 + Profile::LEN
       if (acctInfo && acctInfo.data.length < expectedSize) {
         console.log(`Profile account undersized (${acctInfo.data.length} < ${expectedSize}), migrating...`);
         await this.migrateProfile();
@@ -452,8 +452,8 @@ export class ShyftClient {
     const compressedAvatar = compressIpfsUrl(avatarUrl);
     const compressedBanner = compressIpfsUrl(bannerUrl);
 
-    const sig = await requestServerTx("updateProfile", { displayName, bio, avatarUrl: compressedAvatar, bannerUrl: compressedBanner }, this.provider.wallet, this.provider.connection);
-    
+    const sig = await requestServerTx("updateProfile", { displayName, bio, avatarUrl: compressedAvatar, bannerUrl: compressedBanner, websiteUrl }, this.provider.wallet, this.provider.connection);
+
     rpcCache.invalidate("profile_" + user.toBase58());
     return sig;
   }

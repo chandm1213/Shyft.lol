@@ -186,6 +186,7 @@ export default function Profile() {
   const [editBio, setEditBio] = useState("");
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
   const [editBannerUrl, setEditBannerUrl] = useState("");
+  const [editWebsiteUrl, setEditWebsiteUrl] = useState("");
   const [editAvatarPreview, setEditAvatarPreview] = useState<string | null>(null);
   const [editBannerPreview, setEditBannerPreview] = useState<string | null>(null);
   const [editAvatarFile, setEditAvatarFile] = useState<File | null>(null);
@@ -355,6 +356,7 @@ export default function Profile() {
     setEditBio(profileBio);
     setEditAvatarUrl(onChainProfile?.avatarUrl || currentUser?.avatarUrl || "");
     setEditBannerUrl(onChainProfile?.bannerUrl || currentUser?.bannerUrl || "");
+    setEditWebsiteUrl(onChainProfile?.websiteUrl || "");
     setEditAvatarPreview(null);
     setEditBannerPreview(null);
     setEditAvatarFile(null);
@@ -414,6 +416,7 @@ export default function Profile() {
         editBio.trim(),
         avatarUrl,
         bannerUrl,
+        editWebsiteUrl.trim(),
       );
       toast("success", "Profile updated!", "Changes saved on-chain");
       clearRpcCache();
@@ -451,6 +454,7 @@ export default function Profile() {
   const bannerUrl = isViewingOther
     ? (onChainProfile?.bannerUrl || "")
     : (onChainProfile?.bannerUrl || currentUser?.bannerUrl || "");
+  const websiteUrl = onChainProfile?.websiteUrl || "";
 
   /* ── Follow state for viewing other profiles ── */
   const [isFollowingUser, setIsFollowingUser] = useState(false);
@@ -789,10 +793,17 @@ export default function Profile() {
 
         {/* Meta row */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3">
-          <span className="flex items-center gap-1 text-[13px] text-[#64748B]">
-            <Globe className="w-3.5 h-3.5" />
-            Solana Mainnet
-          </span>
+          {websiteUrl && (
+            <a
+              href={websiteUrl.startsWith("http") ? websiteUrl : `https://${websiteUrl}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-[13px] text-[#2563EB] hover:underline"
+            >
+              <LinkIcon className="w-3.5 h-3.5" />
+              {websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+            </a>
+          )}
           <span className="flex items-center gap-1 text-[13px] text-[#64748B]">
             <Calendar className="w-3.5 h-3.5" />
             Joined {joinDate}
@@ -1184,6 +1195,21 @@ export default function Profile() {
                   className="w-full px-3 pt-6 pb-2 bg-transparent border border-[#E2E8F0] rounded-lg text-[15px] text-[#1A1A2E] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 transition-all resize-none"
                 />
                 <span className="absolute right-3 top-2 text-[11px] text-[#94A3B8]">{editBio.length}/64</span>
+              </div>
+
+              {/* Website URL */}
+              <div className="relative">
+                <label className="absolute left-3 top-2 text-[11px] text-[#64748B]">Website</label>
+                <div className="absolute left-3 top-[26px] text-[#94A3B8]">
+                  <LinkIcon className="w-4 h-4" />
+                </div>
+                <input
+                  value={editWebsiteUrl}
+                  onChange={(e) => setEditWebsiteUrl(e.target.value)}
+                  placeholder="yoursite.com"
+                  maxLength={64}
+                  className="w-full pl-8 pr-3 pt-6 pb-2 bg-transparent border border-[#E2E8F0] rounded-lg text-[15px] text-[#1A1A2E] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 transition-all"
+                />
               </div>
             </div>
           </div>

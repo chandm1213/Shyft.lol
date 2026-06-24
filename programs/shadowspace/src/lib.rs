@@ -65,16 +65,19 @@ pub mod shadowspace {
         bio: String,
         avatar_url: String,
         banner_url: String,
+        website_url: String,
     ) -> Result<()> {
         require!(display_name.len() <= 24, ShadowError::ContentTooLong);
         require!(bio.len() <= 64, ShadowError::ContentTooLong);
         require!(avatar_url.len() <= 128, ShadowError::ContentTooLong);
         require!(banner_url.len() <= 128, ShadowError::ContentTooLong);
+        require!(website_url.len() <= 64, ShadowError::ContentTooLong);
         let profile = &mut ctx.accounts.profile;
         profile.display_name = display_name;
         profile.bio = bio;
         profile.avatar_url = avatar_url;
         profile.banner_url = banner_url;
+        profile.website_url = website_url;
         msg!("Profile updated for {}", profile.owner);
         Ok(())
     }
@@ -926,13 +929,14 @@ pub struct Profile {
     pub created_at: i64,
     pub avatar_url: String,
     pub banner_url: String,
+    pub website_url: String,
 }
 
 impl Profile {
     // 32(owner) + (4+16)(username) + (4+24)(display) + (4+64)(bio) + 1(private)
     // + 4(posts) + 4(followers) + 4(following) + 2(convos legacy) + 8(created)
-    // + (4+128)(avatar) + (4+128)(banner)
-    pub const LEN: usize = 32 + 4 + 16 + 4 + 24 + 4 + 64 + 1 + 4 + 4 + 4 + 2 + 8 + 4 + 128 + 4 + 128;
+    // + (4+128)(avatar) + (4+128)(banner) + (4+64)(website)
+    pub const LEN: usize = 32 + 4 + 16 + 4 + 24 + 4 + 64 + 1 + 4 + 4 + 4 + 2 + 8 + 4 + 128 + 4 + 128 + 4 + 64;
 }
 
 #[account]

@@ -54,6 +54,7 @@ export default function Tokens() {
   const [loadingFees, setLoadingFees] = useState(false);
   const [showLaunchModal, setShowLaunchModal] = useState(false);
   const [selectedToken, setSelectedToken] = useState<TokenItem | null>(null);
+  const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
 
   const fetchTokens = useCallback(async () => {
     setLoading(true);
@@ -110,6 +111,25 @@ export default function Tokens() {
   useEffect(() => {
     if (tab === "my-tokens" && publicKey) fetchMyTokens();
   }, [tab, publicKey, fetchMyTokens]);
+
+  useEffect(() => {
+    if (!publicKey) return;
+    const saved = localStorage.getItem(`watchlist_${publicKey.toBase58()}`);
+    if (saved) {
+      try { setWatchlist(new Set(JSON.parse(saved))); } catch {}
+    }
+  }, [publicKey]);
+
+  const toggleWatchlist = useCallback((mint: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!publicKey) return;
+    setWatchlist(prev => {
+      const next = new Set(prev);
+      if (next.has(mint)) next.delete(mint); else next.add(mint);
+      localStorage.setItem(`watchlist_${publicKey.toBase58()}`, JSON.stringify([...next]));
+      return next;
+    });
+  }, [publicKey]);
 
   const totalClaimableSOL = claimable.reduce((sum, p) => {
     const amount = Number(p.totalClaimableLamportsUserShare || p.virtualPoolClaimableAmount || 0)
@@ -224,7 +244,11 @@ export default function Tokens() {
             </div>
           ) : (
             <div className="space-y-2">
-              {tokens.slice(0, 20).map((token, i) => (
+              {[...tokens].sort((a, b) => {
+                const aW = watchlist.has(a.tokenMint) ? 0 : 1;
+                const bW = watchlist.has(b.tokenMint) ? 0 : 1;
+                return aW - bW;
+              }).slice(0, 20).map((token, i) => (
                 <button
                   key={token.tokenMint}
                   onClick={() => setSelectedToken(token)}
@@ -253,7 +277,9 @@ export default function Tokens() {
                     }`}>
                       {token.status === "MIGRATED" ? "Live" : token.status === "PRE_GRAD" ? "Pre-Grad" : token.status}
                     </span>
-                    <ChevronRight className="w-4 h-4 text-[#CBD5E1]" />
+                    <button onClick={(e) => toggleWatchlist(token.tokenMint, e)} className="p-1 rounded-lg hover:bg-[#F1F5F9] transition">
+                      <Star className={`w-4 h-4 ${watchlist.has(token.tokenMint) ? "fill-[#F59E0B] text-[#F59E0B]" : "text-[#CBD5E1]"}`} />
+                    </button>
                   </div>
                 </button>
               ))}
@@ -349,6 +375,9 @@ export default function Tokens() {
                         }`}>
                           {token.status === "MIGRATED" ? "Live" : token.status === "PRE_GRAD" ? "Pre-Grad" : token.status}
                         </span>
+                        <button onClick={(e) => toggleWatchlist(token.tokenMint, e)} className="p-1 rounded-lg hover:bg-[#F1F5F9] transition">
+                          <Star className={`w-4 h-4 ${watchlist.has(token.tokenMint) ? "fill-[#F59E0B] text-[#F59E0B]" : "text-[#CBD5E1]"}`} />
+                        </button>
                         <ChevronRight className="w-4 h-4 text-[#CBD5E1]" />
                       </div>
                     </button>

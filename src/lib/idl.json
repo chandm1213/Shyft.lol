@@ -2194,6 +2194,10 @@
         {
           "name": "banner_url",
           "type": "string"
+        },
+        {
+          "name": "website_url",
+          "type": "string"
         }
       ]
     },
@@ -2919,6 +2923,10 @@
           },
           {
             "name": "banner_url",
+            "type": "string"
+          },
+          {
+            "name": "website_url",
             "type": "string"
           }
         ]
