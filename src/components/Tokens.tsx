@@ -131,6 +131,9 @@ export default function Tokens() {
     });
   }, [publicKey]);
 
+  const safeImg = (url: string) =>
+    url?.startsWith("http://") ? `/api/proxy-image?url=${encodeURIComponent(url)}` : url;
+
   const totalClaimableSOL = claimable.reduce((sum, p) => {
     const amount = Number(p.totalClaimableLamportsUserShare || p.virtualPoolClaimableAmount || 0)
       + Number(p.dammPoolClaimableAmount || 0);
@@ -256,12 +259,21 @@ export default function Tokens() {
                 >
                   <span className="text-xs font-medium text-[#94A3B8] w-5">{i + 1}</span>
                   {token.image ? (
-                    <img src={token.image} alt="" className="w-9 h-9 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center">
-                      <span className="text-xs font-bold text-white">{token.symbol?.[0] || "?"}</span>
-                    </div>
-                  )}
+                    <img
+                      src={safeImg(token.image)}
+                      alt=""
+                      className="w-9 h-9 rounded-full object-cover"
+                      onError={(e) => {
+                        const el = e.currentTarget;
+                        el.style.display = "none";
+                        const fallback = el.nextElementSibling as HTMLElement;
+                        if (fallback) fallback.style.display = "flex";
+                      }}
+                    />
+                  ) : null}
+                  <div className={`w-9 h-9 rounded-full bg-gradient-to-br from-[#2563EB] to-[#7C3AED] items-center justify-center ${token.image ? "hidden" : "flex"}`}>
+                    <span className="text-xs font-bold text-white">{token.symbol?.[0] || "?"}</span>
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-semibold text-[#1A1A2E] truncate">{token.name}</span>
@@ -352,12 +364,21 @@ export default function Tokens() {
                       className="w-full flex items-center gap-3 p-3 bg-white rounded-2xl border border-[#E2E8F0] hover:border-[#2563EB]/30 hover:shadow-sm transition text-left"
                     >
                       {token.image ? (
-                        <img src={token.image} alt="" className="w-9 h-9 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center">
-                          <span className="text-xs font-bold text-white">{token.symbol?.[0] || "?"}</span>
-                        </div>
-                      )}
+                        <img
+                          src={safeImg(token.image)}
+                          alt=""
+                          className="w-9 h-9 rounded-full object-cover"
+                          onError={(e) => {
+                            const el = e.currentTarget;
+                            el.style.display = "none";
+                            const fallback = el.nextElementSibling as HTMLElement;
+                            if (fallback) fallback.style.display = "flex";
+                          }}
+                        />
+                      ) : null}
+                      <div className={`w-9 h-9 rounded-full bg-gradient-to-br from-[#2563EB] to-[#7C3AED] items-center justify-center ${token.image ? "hidden" : "flex"}`}>
+                        <span className="text-xs font-bold text-white">{token.symbol?.[0] || "?"}</span>
+                      </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-semibold text-[#1A1A2E] truncate">{token.name}</span>
@@ -482,7 +503,7 @@ export default function Tokens() {
             <div className="p-5 border-b border-[#E2E8F0]">
               <div className="flex items-center gap-3">
                 {selectedToken.image ? (
-                  <img src={selectedToken.image} alt="" className="w-12 h-12 rounded-full object-cover" />
+                  <img src={safeImg(selectedToken.image)} alt="" className="w-12 h-12 rounded-full object-cover" />
                 ) : (
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center">
                     <span className="text-lg font-bold text-white">{selectedToken.symbol?.[0]}</span>
