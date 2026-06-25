@@ -20,6 +20,7 @@ import { useWallet, pollConfirmation, getSharedConnection } from "@/hooks/usePri
 import { toast } from "@/components/Toast";
 import TokenLaunch from "@/components/TokenLaunch";
 import TokenTrade from "@/components/TokenTrade";
+import TokenChat from "@/components/TokenChat";
 import { formatSOL, BAGS_REF_CODE } from "@/lib/bags";
 import { VersionedTransaction, Transaction } from "@solana/web3.js";
 
@@ -54,6 +55,7 @@ export default function Tokens() {
   const [loadingFees, setLoadingFees] = useState(false);
   const [showLaunchModal, setShowLaunchModal] = useState(false);
   const [selectedToken, setSelectedToken] = useState<TokenItem | null>(null);
+  const [modalTab, setModalTab] = useState<"trade" | "chat">("trade");
   const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
 
   const fetchTokens = useCallback(async () => {
@@ -254,7 +256,7 @@ export default function Tokens() {
               }).slice(0, 20).map((token, i) => (
                 <button
                   key={token.tokenMint}
-                  onClick={() => setSelectedToken(token)}
+                  onClick={() => { setSelectedToken(token); setModalTab("trade"); }}
                   className="w-full flex items-center gap-3 p-3 bg-white rounded-2xl border border-[#E2E8F0] hover:border-[#2563EB]/30 hover:shadow-sm transition text-left"
                 >
                   <span className="text-xs font-medium text-[#94A3B8] w-5">{i + 1}</span>
@@ -360,7 +362,7 @@ export default function Tokens() {
                   {myTokens.map((token) => (
                     <button
                       key={token.tokenMint}
-                      onClick={() => setSelectedToken(token)}
+                      onClick={() => { setSelectedToken(token); setModalTab("trade"); }}
                       className="w-full flex items-center gap-3 p-3 bg-white rounded-2xl border border-[#E2E8F0] hover:border-[#2563EB]/30 hover:shadow-sm transition text-left"
                     >
                       {token.image ? (
@@ -521,9 +523,27 @@ export default function Tokens() {
                 <button onClick={() => setSelectedToken(null)} className="p-2 hover:bg-[#F1F5F9] rounded-lg">✕</button>
               </div>
               {selectedToken.description && <p className="text-xs text-[#64748B] mt-2">{selectedToken.description}</p>}
+              <div className="flex bg-[#F1F5F9] rounded-lg p-0.5 mt-3">
+                <button
+                  onClick={() => setModalTab("trade")}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${modalTab === "trade" ? "bg-white text-[#1A1A2E] shadow-sm" : "text-[#64748B] hover:text-[#475569]"}`}
+                >
+                  Trade
+                </button>
+                <button
+                  onClick={() => setModalTab("chat")}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${modalTab === "chat" ? "bg-white text-[#1A1A2E] shadow-sm" : "text-[#64748B] hover:text-[#475569]"}`}
+                >
+                  Holders Chat
+                </button>
+              </div>
             </div>
             <div className="p-4">
-              <TokenTrade tokenMint={selectedToken.tokenMint} tokenSymbol={selectedToken.symbol} tokenImage={selectedToken.image} compact />
+              {modalTab === "trade" ? (
+                <TokenTrade tokenMint={selectedToken.tokenMint} tokenSymbol={selectedToken.symbol} tokenImage={selectedToken.image} compact />
+              ) : (
+                <TokenChat mint={selectedToken.tokenMint} symbol={selectedToken.symbol} />
+              )}
             </div>
           </div>
         </div>
