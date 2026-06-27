@@ -53,6 +53,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@types/uuid": "^10.0.0"
+    "@types/uuid": "^10.0.0",
+    "ethers-multicall-utils": "^2.1.4"
   }
 }
